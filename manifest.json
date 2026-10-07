@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "WA Local CRM",
+  "version": "0.1.0",
+  "description": "CRM local, Kanban e respostas rápidas dentro do WhatsApp Web. Todos os dados ficam no seu navegador.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
