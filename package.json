@@ -2,6 +2,8 @@
   "name": "wa-local-crm",
   "version": "0.1.0",
   "private": true,
+  "license": "GPL-3.0-only",
+  "author": "Victor Leon",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
