@@ -1,6 +1,6 @@
 import { MEDIA_MARKERS, OUTGOING_MARKERS, queryAll } from '../utils/domSelectors';
 import { sleep } from '../utils/domHelpers';
-import { normalizeName } from '../utils/format';
+import { looseName, normalizeName } from '../utils/format';
 import { conversationRoot } from './observer';
 import { state } from './state';
 
@@ -106,9 +106,9 @@ export function readMessages(chatName: string, limit = 40): Msg[] {
 
 /** Espera o WhatsApp mostrar a conversa pedida (o observer atualiza state.chat). */
 export async function waitForChat(name: string, key?: string, timeoutMs = 4000): Promise<boolean> {
-  const target = normalizeName(name);
+  const target = looseName(name);
   for (let t = 0; t < timeoutMs; t += 150) {
-    if (state.chat && (state.chat.key === key || normalizeName(state.chat.name) === target)) {
+    if (state.chat && (state.chat.key === key || looseName(state.chat.name) === target)) {
       await sleep(250); // deixa as mensagens renderizarem
       return true;
     }

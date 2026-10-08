@@ -173,6 +173,9 @@ details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 /* ---------- visões do Kanban: tarefas e relatório ---------- */
 .seg { display: inline-flex; gap: 4px; }
 .kb-page { flex: 1; overflow-y: auto; padding: 18px 20px; max-width: 1000px; width: 100%; }
+.tform { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 10px; margin-bottom: 18px; }
+.tform input, .tform select { margin: 0; width: auto; }
+.tform input:not([type]) { flex: 1; min-width: 200px; }
 .tgroup { margin-bottom: 18px; }
 .tgroup h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .tgroup h3 .count { background: color-mix(in srgb, var(--fg) 8%, transparent); border-radius: var(--r-pill); padding: 0 8px; font-size: 11px; }

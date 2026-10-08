@@ -1,6 +1,7 @@
 import { conversationRoot } from './observer';
 import { MESSAGE_ID_PATTERN, OUTGOING_MARKERS, queryAll, queryFirst } from '../utils/domSelectors';
 import { readMessages } from './messages';
+import { rowNames } from './chatList';
 import { getComposer } from '../utils/domHelpers';
 import { state } from './state';
 
@@ -35,6 +36,11 @@ export function collectDiagnostics(): string {
       readAsMine: state.chat ? readMessages(state.chat.name).filter((m) => m.out).length : 0,
     },
     searchBoxTag: queryFirst('searchBox')?.tagName ?? null,
+    searchBoxLabel: queryFirst('searchBox')?.getAttribute('aria-label') ?? null,
+    // nomes que a extensão enxerga nas primeiras linhas da lista (para comparar com o nome do lead)
+    chatRowsSample: rows.slice(0, 8).map((r) => rowNames(r).map((n) => mask(n).slice(0, 40))),
+    chatRowTags: rows.slice(0, 2).map((r) => `${r.tagName.toLowerCase()}[role=${r.getAttribute('role')}]`),
+    leadNames: state.contacts.slice(0, 8).map((c) => `${c.name} (${c.phone.startsWith('name_') ? 'só nome' : 'chave'})`),
     chatListRows: rows.length,
     contacts: state.contacts.length,
   }, null, 2);

@@ -1,7 +1,7 @@
 import type { Contact, Stage } from '../types';
 import { queryAll } from '../utils/domSelectors';
 import { clearSearch, sleep, typeInSearch } from '../utils/domHelpers';
-import { normalizeName, tagColor } from '../utils/format';
+import { looseName, normalizeName, tagColor } from '../utils/format';
 import { state } from './state';
 
 const BADGE_ATTR = 'data-wacrm-badges';
@@ -63,26 +63,40 @@ export function refreshBadges(): void {
   }
 }
 
-/** Só letras e dígitos: "Lucas 🚀" e "lucas" batem. */
-const loose = (s: string) => normalizeName(s).replace(/[^\p{L}\p{N}]+/gu, '');
+/** Linhas da lista de conversas e dos resultados da pesquisa (que nem sempre ficam dentro de #pane-side). */
+const EXTRA_ROWS = ['#side [role="listitem"]', '#side [role="row"]', '#side [data-testid="cell-frame-container"]', '[aria-label*="esultados"] [role="listitem"]', '[aria-label*="esults"] [role="listitem"]'];
+
+function allRows(): HTMLElement[] {
+  const set = new Set<HTMLElement>(queryAll('chatListRows'));
+  for (const sel of EXTRA_ROWS) document.querySelectorAll<HTMLElement>(sel).forEach((r) => set.add(r));
+  return [...set].filter((r) => !r.closest('#wa-local-crm-host'));
+}
+
+/** Nomes possíveis de uma linha: todos os title e a primeira linha de texto (o nome nem sempre tem title). */
+export function rowNames(row: HTMLElement): string[] {
+  const titles = Array.from(row.querySelectorAll('[title]')).map((e) => e.getAttribute('title')?.trim() ?? '');
+  const firstLine = row.innerText.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return [...new Set([rowName(row), ...titles, firstLine].filter(Boolean))];
+}
 
 function findRow(name: string): HTMLElement | undefined {
-  const rows = queryAll('chatListRows');
+  const rows = allRows();
   const exact = normalizeName(name);
-  const lo = loose(name);
-  return rows.find((r) => normalizeName(rowName(r)) === exact) ?? (lo ? rows.find((r) => loose(rowName(r)) === lo) : undefined);
+  const lo = looseName(name);
+  return rows.find((r) => rowNames(r).some((n) => normalizeName(n) === exact))
+    ?? (lo ? rows.find((r) => rowNames(r).some((n) => looseName(n) === lo)) : undefined);
 }
 
 /** Na busca por número o título é o nome salvo: aceita a linha que mostra os últimos dígitos ou o único resultado. */
 function findRowByPhone(digits: string): HTMLElement | undefined {
-  const rows = queryAll('chatListRows');
+  const rows = allRows();
   const tail = digits.slice(-8);
   return rows.find((r) => (r.textContent ?? '').replace(/\D/g, '').includes(tail)) ?? (rows.length === 1 ? rows[0] : undefined);
 }
 
 async function searchAndFind(text: string, find: () => HTMLElement | undefined): Promise<HTMLElement | undefined> {
   if (!(await typeInSearch(text))) return undefined;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     await sleep(350);
     const row = find();
     if (row) return row;
@@ -90,11 +104,24 @@ async function searchAndFind(text: string, find: () => HTMLElement | undefined):
   return undefined;
 }
 
+/** Clique "de verdade": o WhatsApp abre a conversa no mousedown/pointerdown, não só no click. */
+function realClick(el: HTMLElement): void {
+  const r = el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+  el.dispatchEvent(new PointerEvent('pointerdown', { ...opts, pointerType: 'mouse', isPrimary: true }));
+  el.dispatchEvent(new MouseEvent('mousedown', opts));
+  el.dispatchEvent(new PointerEvent('pointerup', { ...opts, pointerType: 'mouse', isPrimary: true }));
+  el.dispatchEvent(new MouseEvent('mouseup', opts));
+  el.dispatchEvent(new MouseEvent('click', opts));
+}
+
+export type OpenResult = 'opened' | 'not-found';
+
 /**
  * Abre a conversa clicando na linha da lista. Se ela não estiver visível, pesquisa pelo nome e, para contatos
  * com telefone, pelo número. Limpa a pesquisa depois para a lista voltar ao normal.
  */
-export async function openChat(name: string, key?: string): Promise<boolean> {
+export async function openChat(name: string, key?: string): Promise<OpenResult> {
   let row = findRow(name);
   let searched = false;
   if (!row) {
@@ -103,8 +130,8 @@ export async function openChat(name: string, key?: string): Promise<boolean> {
   }
   const digits = key && /^\d{8,}$/.test(key) ? key : null;
   if (!row && digits) row = await searchAndFind(digits, () => findRowByPhone(digits));
-  const el = row && (rowTitle(row) ?? row);
-  if (el) el.click();
-  if (searched) window.setTimeout(() => void clearSearch(), 600);
-  return !!el;
+  if (row) realClick(rowTitle(row) ?? row);
+  else console.warn('[WA CRM] conversa não encontrada', { name, rows: allRows().slice(0, 15).map(rowNames) });
+  if (searched) window.setTimeout(() => void clearSearch(), 800);
+  return row ? 'opened' : 'not-found';
 }

@@ -40,3 +40,6 @@ export function applyVars(text: string, chat: ChatContext | null): string {
 }
 
 export const normalizeName = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Só letras e dígitos, sem acento: "Lucas 🚀" e "lucas" batem. */
+export const looseName = (s: string) => normalizeName(s).replace(/[^\p{L}\p{N}]+/gu, '');

@@ -1,6 +1,6 @@
 import type { Contact, Stage, Task } from '../types';
 import { saveStages, saveViewPrefs } from '../storage/chromeStore';
-import { blankContact, deleteContact, getOrCreateContact, putContact } from '../storage/db';
+import { blankContact, deleteContact, getOrCreateContact, putContact, rekeyContact } from '../storage/db';
 import { emitDataChange } from '../storage/bus';
 import { openChat, visibleChatNames } from '../content/chatList';
 import { analyzeChat } from '../content/ai';
@@ -8,7 +8,7 @@ import { funnelStats, inFunnel, isGroupContact, stageProbability, weightedValue 
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
-import { addDays, applyVars, avatarColor, initials, money, normalizeName, tagHue, todayStr } from '../utils/format';
+import { addDays, applyVars, avatarColor, initials, looseName, money, normalizeName, tagHue, todayStr } from '../utils/format';
 import { h, toast, uid } from './h';
 import { icon } from './icons';
 
@@ -42,7 +42,8 @@ export function mountKanban(root: ShadowRoot): Kanban {
   const drafts = new Map<string, string>(); // rascunhos por contato
 
   const isOpen = () => !overlay.classList.contains('hidden');
-  const sameChat = (c: Contact) => !!state.chat && (state.chat.key === c.phone || normalizeName(state.chat.name) === normalizeName(c.name));
+  // nome comparado só por letras e dígitos: o lead "Lucas" casa com a conversa "Lucas 🚀"
+  const sameChat = (c: Contact) => !!state.chat && (state.chat.key === c.phone || looseName(state.chat.name) === looseName(c.name));
 
   function visible(list: Contact[]): Contact[] {
     const q = normalizeName(query);
@@ -104,7 +105,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
 
   async function open(c: Contact) {
     if (!split && !setSplit(true)) overlay.classList.add('hidden');
-    if (!(await openChat(c.name, c.number ?? c.phone))) {
+    if ((await openChat(c.name, c.number ?? c.phone)) === 'not-found') {
       overlay.classList.remove('hidden');
       toast(root, 'Não encontrei a conversa "' + c.name + '" na lista. Role a lista ou pesquise manualmente.');
     }
@@ -122,8 +123,12 @@ export function mountKanban(root: ShadowRoot): Kanban {
     if (msgs.length) {
       box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (m.media && m.text === `[${m.media}]` ? ' media' : '') }, group && !m.out && m.author ? h('div', { class: 'author' }, m.author) : null, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, h('span', { class: 'time' }, m.time))));
     } else if (chatError) {
+      const openNow = state.chat && !sameChat(c) ? state.chat : null;
       box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), h('span', {}, chatError,
-        h('button', { class: 'btn ghost sm', style: 'margin-top:8px', on: { click: () => void retryChat(c) } }, 'Tentar de novo'))));
+        h('div', { class: 'inline wrap', style: 'margin-top:8px' },
+          h('button', { class: 'btn ghost sm', on: { click: () => void retryChat(c) } }, 'Tentar de novo'),
+          split ? null : h('button', { class: 'btn ghost sm', title: 'Mostra o WhatsApp ao lado para você abrir a conversa', on: { click: () => { setSplit(true); render(); } } }, 'Abrir WhatsApp ao lado'),
+          openNow ? h('button', { class: 'btn sm', title: 'Liga este lead à conversa que está aberta no WhatsApp', on: { click: () => void adoptOpenChat(c) } }, `Usar "${openNow.name}"`) : null))));
     } else if (sameChat(c)) {
       box.replaceChildren(h('div', { class: 'state' }, 'Nenhuma mensagem de texto visível. Fotos e áudios não aparecem aqui.'));
     } else {
@@ -142,10 +147,27 @@ export function mountKanban(root: ShadowRoot): Kanban {
   async function loadChat(c: Contact) {
     chatError = null;
     if (!sameChat(c)) {
-      const ok = (await openChat(c.name, c.number ?? c.phone)) && (await waitForChat(c.name, c.phone));
-      if (!ok) chatError = `Não encontrei "${c.name}" na lista nem na pesquisa do WhatsApp. Confira se o nome do lead é igual ao da conversa.`;
+      const found = await openChat(c.name, c.number ?? c.phone);
+      if (found === 'not-found') chatError = `Não achei "${c.name}" na lista nem na pesquisa do WhatsApp. Abra a conversa no WhatsApp ao lado e clique em "Usar…" para ligar o lead a ela.`;
+      else if (!(await waitForChat(c.name, c.phone))) chatError = `Cliquei em "${c.name}", mas a conversa não abriu. Abra-a no WhatsApp ao lado e clique em "Usar…".`;
     }
     refreshChat();
+  }
+
+  /** Plano B: o usuário abre a conversa no WhatsApp e liga o lead a ela (troca a chave e o nome do lead). */
+  async function adoptOpenChat(c: Contact) {
+    const chat = state.chat;
+    if (!chat) return toast(root, 'Abra a conversa no WhatsApp primeiro.');
+    if (!confirm(`Ligar o lead "${c.name}" à conversa aberta "${chat.name}"?`)) return;
+    const merged = await rekeyContact(c.phone, chat.key, chat.number ?? undefined);
+    if (merged) {
+      merged.name = chat.name;
+      if (chat.isGroup) merged.isGroup = true;
+      await putContact(merged);
+    }
+    chatFor = chat.key;
+    chatError = null;
+    render();
   }
 
   async function retryChat(c: Contact) {
@@ -323,6 +345,29 @@ export function mountKanban(root: ShadowRoot): Kanban {
     await putContact(c);
   }
 
+  /** Criar tarefa direto na aba Tarefas (também dá no painel do contato, Alt+P > Contato > Tarefas). */
+  function newTaskForm(): HTMLElement {
+    const leads = state.contacts.filter((c) => state.view.showInternal || !c.internal).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const chat = state.chat;
+    const isCurrent = (c: Contact) => !!chat && (c.phone === chat.key || looseName(c.name) === looseName(chat.name));
+    const text = h('input', { placeholder: 'Nova tarefa (ex.: enviar proposta)', 'aria-label': 'Texto da tarefa' });
+    const lead = h('select', { 'aria-label': 'Lead da tarefa' },
+      h('option', { value: '' }, 'Escolha o lead'),
+      ...leads.map((c) => h('option', { value: c.phone, selected: isCurrent(c) }, c.name || c.phone)));
+    const due = h('input', { type: 'date', 'aria-label': 'Prazo', value: todayStr() });
+    const add = async () => {
+      const c = state.contacts.find((x) => x.phone === lead.value);
+      const t = text.value.trim();
+      if (!t) return text.focus();
+      if (!c) return toast(root, 'Escolha o lead da tarefa.');
+      c.tasks = [...c.tasks, { id: uid(), text: t, done: false, createdAt: Date.now(), due: due.value || undefined }];
+      await putContact(c);
+      toast(root, `Tarefa criada para ${c.name}.`);
+    };
+    text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void add(); });
+    return h('div', { class: 'tform' }, text, lead, due, h('button', { class: 'btn', on: { click: () => void add() } }, icon('plus'), 'Adicionar'));
+  }
+
   function tasksView(): HTMLElement {
     const today = todayStr();
     const week = addDays(7);
@@ -356,7 +401,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
       const mine = items.filter(({ t }) => test(t));
       return mine.length ? h('section', { class: 'tgroup' }, h('h3', {}, label, h('span', { class: 'count' }, mine.length)), ...mine.map(row)) : null;
     });
-    return h('div', { class: 'kb-page' }, ...(items.length ? sections : [h('div', { class: 'empty' }, icon('check'), 'Nenhuma tarefa aberta.')]));
+    return h('div', { class: 'kb-page' }, newTaskForm(), ...(items.length ? sections : [h('div', { class: 'empty' }, icon('check'), 'Nenhuma tarefa aberta.')]));
   }
 
   /* ---------- relatório do funil ---------- */
