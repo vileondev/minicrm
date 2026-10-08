@@ -5,7 +5,7 @@ import { isAwaiting, setStatus } from '../content/conversations';
 import { readMessages } from '../content/messages';
 import { state } from '../content/state';
 import { sanitizePhone } from '../utils/domHelpers';
-import { fullDate, looseName, relDay, relTime, slug, tagHue, todayStr } from '../utils/format';
+import { fullDate, looseName, money, relDay, relTime, slug, tagHue, todayStr } from '../utils/format';
 import { icon } from './icons';
 import { fieldError, h, toast, uid } from './h';
 
@@ -132,8 +132,37 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
     ...state.stages.map((s) => h('button', { class: 'pill' + (contact.stageId === s.id ? ' on' : ''), 'aria-pressed': String(contact.stageId === s.id), on: { click: () => { contact.stageId = s.id; void save(); } } },
       h('span', { class: 'dot', style: `background:${s.color}` }), s.name)));
 
+  const items = contact.items ?? [];
   const value = h('input', { id: 'cp-value', type: 'number', min: '0', step: '10', placeholder: '0', value: contact.value ? String(contact.value) : '',
-    on: { change: (e) => { contact.value = Math.max(0, Number((e.target as HTMLInputElement).value) || 0); void save(); } } });
+    disabled: items.length > 0, on: { change: (e) => { contact.value = Math.max(0, Number((e.target as HTMLInputElement).value) || 0); void save(); } } });
+
+  /* ---------- produtos do negócio (catálogo) ---------- */
+  const setItems = (next: typeof items) => {
+    contact.items = next.length ? next : undefined;
+    if (next.length) contact.value = next.reduce((a, i) => a + i.price * i.qty, 0);
+    void save();
+  };
+  const prodSel = h('select', { id: 'cp-prod', 'aria-label': 'Produto do catálogo' }, h('option', { value: '' }, 'Produto'),
+    ...state.products.map((p) => h('option', { value: p.id }, `${p.name} (${money(p.price)})`)));
+  const qtyIn = h('input', { type: 'number', min: '1', value: '1', 'aria-label': 'Quantidade', class: 'qty' });
+  const prodErr = fieldError();
+  prodSel.addEventListener('change', () => prodErr.clear(prodSel));
+  const addItem = () => {
+    const p = state.products.find((x) => x.id === prodSel.value);
+    if (!p) return prodErr.show(prodSel, 'Escolha um produto do catálogo.');
+    const qty = Math.max(1, Math.round(Number(qtyIn.value)) || 1);
+    const same = items.find((i) => i.productId === p.id && i.price === p.price);
+    setItems(same ? items.map((i) => (i === same ? { ...i, qty: i.qty + qty } : i)) : [...items, { productId: p.id, name: p.name, price: p.price, qty }]);
+    toast(root, `${qty}x ${p.name} adicionado ao negócio.`);
+  };
+  const productsSec = !state.products.length && !items.length ? null : h('div', { class: 'sec' }, h('h4', {}, 'Produtos'),
+    ...items.map((i, idx) => h('div', { class: 'row item' },
+      h('span', { class: 't' }, `${i.qty}x ${i.name}`),
+      h('span', { class: 'muted num' }, money(i.price * i.qty)),
+      h('button', { class: 'x', title: 'Tirar do negócio', 'aria-label': 'Tirar ' + i.name, on: { click: () => setItems(items.filter((_, j) => j !== idx)) } }, icon('x', 12)))),
+    items.length ? h('div', { class: 'row total' }, h('b', {}, 'Total'), h('b', { class: 'num' }, money(items.reduce((a, i) => a + i.price * i.qty, 0)))) : null,
+    state.products.length ? h('div', { class: 'inline', style: 'margin-top:8px' }, prodSel, qtyIn, h('button', { class: 'btn sm', on: { click: addItem } }, 'Adicionar')) : null,
+    prodErr.el);
 
   const knownTags = [...new Set(state.contacts.flatMap((c) => c.tags))].filter((t) => !contact.tags.includes(t));
   const tagIn = h('input', { id: 'cp-tag', placeholder: 'Nova tag + Enter', list: 'wacrm-tags' });
@@ -192,7 +221,9 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
     header,
     numberSec,
     h('div', { class: 'sec' }, h('h4', {}, 'Etapa do funil'), stageBtns),
-    h('div', { class: 'sec' }, h('label', { class: 'field', for: 'cp-value' }, 'Valor do negócio (R$)'), value),
+    productsSec,
+    h('div', { class: 'sec' }, h('label', { class: 'field', for: 'cp-value' }, 'Valor do negócio (R$)'), value,
+      items.length ? h('p', { class: 'muted' }, 'Calculado pelos produtos. Tire os produtos para digitar outro valor.') : null),
     h('div', { class: 'sec' }, h('h4', {}, 'Tags'),
       h('div', { class: 'chips' }, ...contact.tags.map((t) => h('span', { class: 'chip', style: `--h:${tagHue(t)}` }, t,
         h('button', { class: 'x', title: 'Remover tag', 'aria-label': 'Remover tag ' + t, on: { click: () => { contact.tags = contact.tags.filter((x) => x !== t); void save(); } } }, icon('x', 12))))),
@@ -200,7 +231,7 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
     fieldsSec,
     h('div', { class: 'sec' }, h('h4', {}, 'Tarefas'),
       ...contact.tasks.map((t) => h('div', { class: 'row' + (t.done ? ' done' : '') + (!t.done && t.due && t.due < todayStr() ? ' late' : '') },
-        h('label', {}, h('input', { type: 'checkbox', checked: t.done, on: { change: () => { t.done = !t.done; void save(); } } }), h('span', { class: 't' }, t.text)),
+        h('label', {}, h('input', { type: 'checkbox', checked: t.done, on: { change: () => { t.done = !t.done; t.doneAt = t.done ? Date.now() : undefined; void save(); } } }), h('span', { class: 't' }, t.text)),
         h('span', { class: 'due muted', title: t.due ? new Date(t.due + 'T00:00').toLocaleDateString('pt-BR') : '' }, t.due ? relDay(t.due) : ''),
         h('button', { class: 'x', title: 'Apagar tarefa', 'aria-label': 'Apagar tarefa', on: { click: () => { contact.tasks = contact.tasks.filter((x) => x.id !== t.id); void save(); } } }, icon('x', 12)))),
       h('div', { style: 'margin-top:8px' }, h('label', { class: 'field', for: 'cp-task' }, 'Nova tarefa'), taskIn,

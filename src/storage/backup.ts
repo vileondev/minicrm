@@ -1,5 +1,5 @@
-import type { Automation, Contact, FieldDef, QuickReply, Rule, Stage } from '../types';
-import { getAutomations, getFields, getQuickReplies, getRules, getStages, getTagColors, saveAutomations, saveFields, saveQuickReplies, saveRules, saveStages, saveTagColors } from './chromeStore';
+import type { Automation, Contact, FieldDef, Product, QuickReply, Rule, Stage, Template } from '../types';
+import { getAutomations, getFields, getQuickReplies, getRules, getProducts, getStages, getTagColors, getTemplates, saveAutomations, saveFields, saveProducts, saveQuickReplies, saveRules, saveStages, saveTagColors, saveTemplates } from './chromeStore';
 import { getAllContacts, replaceAllContacts } from './db';
 
 interface Backup {
@@ -10,6 +10,8 @@ interface Backup {
   rules: Rule[];
   automations?: Automation[]; // a chave de API da IA NÃO entra no backup
   fields?: FieldDef[];
+  products?: Product[];
+  templates?: Template[];
   tagColors?: Record<string, number>;
   contacts: Contact[];
 }
@@ -23,6 +25,8 @@ export async function exportBackup(): Promise<string> {
     rules: await getRules(),
     automations: await getAutomations(),
     fields: await getFields(),
+    products: await getProducts(),
+    templates: await getTemplates(),
     tagColors: await getTagColors(),
     contacts: await getAllContacts(),
   };
@@ -37,6 +41,8 @@ export async function importBackup(json: string): Promise<number> {
   await saveRules(data.rules ?? []);
   await saveAutomations(data.automations ?? []);
   await saveFields(data.fields ?? []);
+  await saveProducts(data.products ?? []);
+  if (data.templates) await saveTemplates(data.templates);
   await saveTagColors(data.tagColors ?? {});
   await replaceAllContacts(data.contacts);
   return data.contacts.length;

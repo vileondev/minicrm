@@ -71,8 +71,45 @@ async function callAi(req: AiRequest): Promise<string> {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg: AiRequest, sender, sendResponse) => {
-  if (msg?.type !== 'wacrm-ai' || sender.id !== chrome.runtime.id) return false;
+interface NotifyRequest {
+  type: 'wacrm-notify';
+  id: string; // "lead|<chave>|<tarefa>" ou "tasks"
+  title: string;
+  message: string;
+}
+
+/**
+ * Avisos de tarefa. O id do aviso guarda a aba de origem e o que abrir no clique, porque o service worker
+ * pode ser reiniciado entre o aviso e o clique.
+ */
+function notify(req: NotifyRequest, tabId: number): void {
+  chrome.notifications.create(`${tabId}|${req.id}|${Date.now()}`, {
+    type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon-128.png'), title: req.title, message: req.message, priority: 1,
+  });
+}
+
+chrome.notifications.onClicked.addListener(async (notifId) => {
+  const [tab, kind, key] = notifId.split('|');
+  const tabId = Number(tab);
+  chrome.notifications.clear(notifId);
+  try {
+    const t = await chrome.tabs.update(tabId, { active: true });
+    if (t?.windowId !== undefined) await chrome.windows.update(t.windowId, { focused: true });
+    await chrome.tabs.sendMessage(tabId, kind === 'lead' ? { type: 'wacrm-open-lead', key: decodeURIComponent(key ?? '') } : { type: 'wacrm-open-tasks' });
+  } catch {
+    // a aba do WhatsApp foi fechada: abre uma nova
+    await chrome.tabs.create({ url: 'https://web.whatsapp.com/' });
+  }
+});
+
+chrome.runtime.onMessage.addListener((msg: AiRequest | NotifyRequest, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return false;
+  if (msg?.type === 'wacrm-notify') {
+    if (sender.tab?.id !== undefined) notify(msg, sender.tab.id);
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg?.type !== 'wacrm-ai') return false;
   callAi(msg).then(
     (text) => sendResponse({ ok: true, text }),
     (err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }),

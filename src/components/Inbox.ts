@@ -100,11 +100,44 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   const tray = h('div', { class: 'ib-attach hidden', 'aria-label': 'Fotos para enviar' });
   const picker = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'hidden', 'aria-hidden': 'true', tabindex: '-1' });
   picker.addEventListener('change', () => { addFiles([...(picker.files ?? [])]); picker.value = ''; });
+  /* modelos de mensagem: lista por categoria, com busca */
+  const tplSearch = h('input', { type: 'search', placeholder: 'Buscar modelo', 'aria-label': 'Buscar modelo' });
+  const tplList = h('div', { class: 'tpl-list' });
+  const tplPop = h('div', { class: 'ib-tpl hidden', role: 'dialog', 'aria-label': 'Modelos de mensagem' }, tplSearch, tplList);
+  const tplBtn = h('button', { class: 'x', title: 'Modelos de mensagem', 'aria-label': 'Modelos de mensagem', 'aria-expanded': 'false', on: { click: () => toggleTemplates() } }, icon('template'));
+  tplSearch.addEventListener('input', () => renderTemplates());
+  tplSearch.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleTemplates(false); });
+
+  function toggleTemplates(on = tplPop.classList.contains('hidden')) {
+    tplPop.classList.toggle('hidden', !on);
+    tplBtn.setAttribute('aria-expanded', String(on));
+    if (on) { closeQuickReplies(); tplSearch.value = ''; renderTemplates(); tplSearch.focus(); }
+  }
+
+  function renderTemplates() {
+    const q = normalizeName(tplSearch.value);
+    const list = state.templates.filter((t) => !q || normalizeName(`${t.title} ${t.category} ${t.text}`).includes(q));
+    const cats = [...new Set(list.map((t) => t.category))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const chat = state.chat;
+    const vars = fieldVars(chat ? leadFor(chat).existing : undefined);
+    tplList.replaceChildren(...(list.length
+      ? cats.map((cat) => h('div', { class: 'tpl-cat' }, h('h5', {}, cat), ...list.filter((t) => t.category === cat).map((t) =>
+          h('button', { class: 'item', on: { click: () => {
+            const text = applyVars(t.text, chat, vars);
+            ta.value = ta.value.trim() ? ta.value.replace(/\s*$/, '\n') + text : text;
+            if (chat) drafts.set(chat.key, ta.value);
+            toggleTemplates(false);
+            ta.focus();
+          } } }, h('b', {}, t.title), h('small', {}, applyVars(t.text, chat, vars))))))
+      : [h('div', { class: 'hint' }, state.templates.length ? 'Nenhum modelo com esse termo.' : 'Nenhum modelo. Crie em Ajustes, Modelos de mensagem.')]));
+  }
+
   const photoBtn = h('button', { class: 'x', title: 'Enviar foto (você também pode colar ou arrastar)', 'aria-label': 'Escolher foto para enviar', on: { click: () => picker.click() } }, icon('image'));
   const aiBtn = h('button', { class: 'x', title: 'Analisar com IA e sugerir resposta', 'aria-label': 'Analisar com IA', on: { click: () => void analyze() } }, icon('sparkle'));
-  const composer = h('div', { class: 'ib-composer' }, qrPop, tray, ta, picker,
+  const composer = h('div', { class: 'ib-composer' }, qrPop, tplPop, tray, ta, picker,
     h('div', { class: 'ib-tools' },
       photoBtn,
+      tplBtn,
       h('button', { class: 'x', title: 'Respostas rápidas', 'aria-label': 'Respostas rápidas', on: { click: () => openQuickReplies('') } }, icon('lightning')),
       aiBtn,
       h('button', { class: 'x', title: 'Áudio, documentos e figurinhas: use o WhatsApp original', 'aria-label': 'Abrir o WhatsApp original', on: { click: () => opts.showWhatsApp() } }, icon('whatsapp')),
@@ -165,6 +198,11 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   panelEl.addEventListener('focusout', () => { window.setTimeout(() => { if (panelDirty && !panelEl.contains(root.activeElement)) renderPanel(); }, 0); });
 
   const el = h('div', { class: 'inbox' }, listCol, chatCol, panelCol);
+  el.addEventListener('mousedown', (e) => {
+    if (tplPop.classList.contains('hidden')) return;
+    const path = e.composedPath();
+    if (!path.includes(tplPop) && !path.includes(tplBtn)) toggleTemplates(false);
+  });
 
   /* ---------- lista ---------- */
 
@@ -307,6 +345,7 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
       m.quote ? h('div', { class: 'quote' }, m.quote) : null,
       m.img ? h('img', { class: 'photo', src: m.img, alt: 'Foto enviada na conversa' }) : null,
       m.img && mediaOnly ? null : h('span', {}, ...highlight(m.text, chatQuery)),
+      m.link ? h('a', { class: 'maplink', href: m.link, target: '_blank', rel: 'noopener noreferrer' }, icon('map', 14), 'Abrir no mapa') : null,
       h('span', { class: 'time', title: m.at ? fullDate(m.at) : '' }, m.time));
   }
 

@@ -14,6 +14,9 @@ import eye from '@phosphor-icons/core/assets/regular/eye.svg';
 import eyeSlash from '@phosphor-icons/core/assets/regular/eye-slash.svg';
 import gearSix from '@phosphor-icons/core/assets/regular/gear-six.svg';
 import image from '@phosphor-icons/core/assets/regular/image.svg';
+import fileText from '@phosphor-icons/core/assets/regular/file-text.svg';
+import mapPin from '@phosphor-icons/core/assets/regular/map-pin.svg';
+import packageIcon from '@phosphor-icons/core/assets/regular/package.svg';
 import kanban from '@phosphor-icons/core/assets/regular/kanban.svg';
 import listChecks from '@phosphor-icons/core/assets/regular/list-checks.svg';
 import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glass.svg';
@@ -58,6 +61,9 @@ const ICONS = {
   gear: gearSix,
   image,
   kanban,
+  template: fileText,
+  map: mapPin,
+  package: packageIcon,
   tasks: listChecks,
   search: magnifyingGlass,
   send: paperPlaneTilt,

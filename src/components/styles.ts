@@ -309,6 +309,45 @@ details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 .ib-qr .item small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .ib-qr .hint { padding: 10px 12px; color: var(--muted); font-size: 12px; }
 .ib-panel { flex: 1; overflow-y: auto; padding: 14px; }
+.ib-tpl { position: absolute; left: 0; bottom: calc(100% + 6px); width: min(420px, 100%); max-height: 340px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); box-shadow: var(--shadow); z-index: 3; }
+.ib-tpl > input { margin: 10px 10px 4px; width: auto; }
+.tpl-list { overflow-y: auto; padding: 0 4px 6px; }
+.tpl-cat h5 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tpl-list .item { display: block; width: 100%; text-align: left; border: 0; background: none; color: inherit; padding: 8px 10px; border-radius: var(--r-ctl); cursor: pointer; font-size: 13px; }
+.tpl-list .item:hover, .tpl-list .item:focus-visible { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.tpl-list .item small { display: block; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tpl-list .hint { padding: 12px; color: var(--muted); font-size: 12px; }
+.tpl-group h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.maplink { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.row.item .t { flex: 1; }
+.row.total { border-top: 1px solid var(--line); }
+.set-row > input.price { max-width: 110px; }
+.inline > select { flex: 1; min-width: 0; }
+.inline > input.qty { width: 64px; flex: none; }
+input:disabled { opacity: .7; cursor: not-allowed; }
+.form-card.wide { max-width: 760px; }
+.import-preview { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.import-preview p { margin: 0; }
+.import-preview .rep { font-size: 12px; }
+
+/* ---------- painel do relatório ---------- */
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.dash-grid.stages { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.dash-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dash-card.wide { grid-column: span 2; }
+.dash-label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.dash-value { font-size: 26px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.delta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.delta.up { color: var(--accent); font-weight: 600; }
+.delta.down { color: var(--danger); font-weight: 600; }
+.dash-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.dur { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-ctl); overflow: hidden; }
+.dur > div { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: var(--raised); }
+.dur > div + div { border-left: 1px solid var(--line); }
+.dur b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dur span { font-size: 11px; color: var(--muted); }
+.dur.empty-dur { display: block; padding: 12px; font-size: 12px; color: var(--muted); text-align: center; }
+@media (max-width: 760px) { .dash-card.wide { grid-column: auto; } }
 
 /* ---------- painel do contato (coluna da direita) ---------- */
 .cp-head { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }

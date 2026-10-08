@@ -1,24 +1,45 @@
 {
   "manifest_version": 3,
   "name": "WA Local CRM",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "CRM local, Kanban, fluxos de automação e assistente de IA opcional dentro do WhatsApp Web. Os dados ficam no seu navegador.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://api.anthropic.com/*", "https://api.openai.com/*", "https://generativelanguage.googleapis.com/*"],
+  "permissions": [
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://web.whatsapp.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["fonts/*"],
-      "matches": ["https://web.whatsapp.com/*"]
+      "resources": [
+        "fonts/*"
+      ],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ]
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

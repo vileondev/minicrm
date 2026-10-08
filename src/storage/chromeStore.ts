@@ -1,6 +1,6 @@
-import type { AiSettings, Automation, FieldDef, QuickReply, Rule, Stage, ViewPrefs } from '../types';
+import type { AiSettings, Automation, FieldDef, Product, QuickReply, Rule, Stage, Template, ViewPrefs } from '../types';
 import { emitDataChange } from './bus';
-import { AI_SETTINGS_KEY, AUTOMATIONS_KEY, AUTOMATION_LOG_KEY, CRM_STAGES_KEY, QUICK_REPLIES_KEY, RULES_KEY, VIEW_PREFS_KEY, CUSTOM_FIELDS_KEY, TAG_COLORS_KEY } from './keys';
+import { AI_SETTINGS_KEY, AUTOMATIONS_KEY, AUTOMATION_LOG_KEY, CRM_STAGES_KEY, QUICK_REPLIES_KEY, RULES_KEY, VIEW_PREFS_KEY, CUSTOM_FIELDS_KEY, TAG_COLORS_KEY, PRODUCTS_KEY, TEMPLATES_KEY, NOTIFIED_KEY } from './keys';
 
 export const DEFAULT_STAGES: Stage[] = [
   { id: 'lead', name: 'Lead', color: '#3b82f6', order: 0, probability: 10 },
@@ -46,7 +46,7 @@ export const getAutomationLog = () => get<Record<string, number>>(AUTOMATION_LOG
 export const saveAutomationLog = (v: Record<string, number>) => set(AUTOMATION_LOG_KEY, v, false);
 export const getAiSettings = async (): Promise<AiSettings> => ({ ...DEFAULT_AI, ...(await get<Partial<AiSettings>>(AI_SETTINGS_KEY, {})) });
 export const saveAiSettings = (v: AiSettings) => set(AI_SETTINGS_KEY, v);
-export const DEFAULT_VIEW: ViewPrefs = { hideGroups: true, showInternal: false, statusFilter: 'all', autoOpen: true };
+export const DEFAULT_VIEW: ViewPrefs = { hideGroups: true, showInternal: false, statusFilter: 'all', autoOpen: true, notifyTasks: true };
 export const getViewPrefs = async (): Promise<ViewPrefs> => ({ ...DEFAULT_VIEW, ...(await get<Partial<ViewPrefs>>(VIEW_PREFS_KEY, {})) });
 export const saveViewPrefs = (v: ViewPrefs) => set(VIEW_PREFS_KEY, v);
 export const getFields = () => get<FieldDef[]>(CUSTOM_FIELDS_KEY, []);
@@ -54,3 +54,15 @@ export const saveFields = (v: FieldDef[]) => set(CUSTOM_FIELDS_KEY, v);
 /** Matiz (0-360) escolhido pelo usuário para cada etiqueta; sem entrada, a cor sai do nome. */
 export const getTagColors = () => get<Record<string, number>>(TAG_COLORS_KEY, {});
 export const saveTagColors = (v: Record<string, number>) => set(TAG_COLORS_KEY, v);
+export const getProducts = () => get<Product[]>(PRODUCTS_KEY, []);
+export const saveProducts = (v: Product[]) => set(PRODUCTS_KEY, v);
+const DEFAULT_TEMPLATES: Template[] = [
+  { id: 'tpl-proposta', title: 'Envio de proposta', category: 'Vendas', text: '{saudacao}, {primeiro_nome}! Segue a proposta que combinamos. Qualquer dúvida, é só me chamar por aqui.' },
+  { id: 'tpl-followup', title: 'Retomar contato', category: 'Follow-up', text: 'Oi, {primeiro_nome}! Passando para saber se conseguiu ver a proposta. Posso ajudar em algo?' },
+  { id: 'tpl-posvenda', title: 'Pós-venda', category: 'Pós-venda', text: 'Oi, {primeiro_nome}! Tudo certo com o seu pedido? Se puder, me conta o que achou.' },
+];
+export const getTemplates = () => get<Template[]>(TEMPLATES_KEY, DEFAULT_TEMPLATES);
+export const saveTemplates = (v: Template[]) => set(TEMPLATES_KEY, v);
+/** Avisos de tarefa já mostrados: id da tarefa -> "YYYY-MM-DD|tipo" (um aviso por tarefa por situação). */
+export const getNotified = () => get<Record<string, string>>(NOTIFIED_KEY, {});
+export const saveNotified = (v: Record<string, string>) => set(NOTIFIED_KEY, v, false);
