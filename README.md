@@ -7,7 +7,7 @@
 Kanban de vendas, tarefas, relatório do funil, respostas rápidas, automações e um assistente de IA opcional,
 tudo rodando no seu navegador. Seus dados não saem do seu computador.
 
-[![Licença: GPL v3](https://img.shields.io/badge/licen%C3%A7a-GPL--3.0-blue.svg)](LICENSE)
+[![Licença: GPL v3 ou posterior](https://img.shields.io/badge/licen%C3%A7a-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome%20%2F%20Edge-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Contribuições bem-vindas](https://img.shields.io/badge/contribui%C3%A7%C3%B5es-bem--vindas-brightgreen.svg)](#-como-contribuir)
@@ -164,7 +164,7 @@ desta extensão envia mensagens sozinha.
 Copyright © 2026 Victor Leon
 
 Este programa é software livre: você pode redistribuí-lo e modificá-lo sob os termos da
-[GNU General Public License versão 3](LICENSE), publicada pela Free Software Foundation.
+[GNU General Public License](LICENSE), publicada pela Free Software Foundation, na versão 3 ou (a seu critério) qualquer versão posterior.
 Ele é distribuído na esperança de ser útil, mas **sem nenhuma garantia**. Veja o arquivo [LICENSE](LICENSE) para os detalhes.
 
 A fonte [Geist](https://github.com/vercel/geist-font) é distribuída sob a SIL Open Font License (veja `public/fonts/Geist-OFL-LICENSE.txt`)
