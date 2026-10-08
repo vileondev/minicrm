@@ -46,7 +46,7 @@ export const getAutomationLog = () => get<Record<string, number>>(AUTOMATION_LOG
 export const saveAutomationLog = (v: Record<string, number>) => set(AUTOMATION_LOG_KEY, v, false);
 export const getAiSettings = async (): Promise<AiSettings> => ({ ...DEFAULT_AI, ...(await get<Partial<AiSettings>>(AI_SETTINGS_KEY, {})) });
 export const saveAiSettings = (v: AiSettings) => set(AI_SETTINGS_KEY, v);
-export const DEFAULT_VIEW: ViewPrefs = { hideGroups: true, showInternal: false, statusFilter: 'all', autoOpen: true, notifyTasks: true };
+export const DEFAULT_VIEW: ViewPrefs = { hideGroups: true, showInternal: false, statusFilter: 'all', autoOpen: true, notifyTasks: true, theme: 'auto' };
 export const getViewPrefs = async (): Promise<ViewPrefs> => ({ ...DEFAULT_VIEW, ...(await get<Partial<ViewPrefs>>(VIEW_PREFS_KEY, {})) });
 export const saveViewPrefs = (v: ViewPrefs) => set(VIEW_PREFS_KEY, v);
 export const getFields = () => get<FieldDef[]>(CUSTOM_FIELDS_KEY, []);

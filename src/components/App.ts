@@ -1,5 +1,7 @@
 import type { Contact } from '../types';
 import { state } from '../content/state';
+import { currentTheme } from '../content/injector';
+import { saveViewPrefs } from '../storage/chromeStore';
 import { todayStr } from '../utils/format';
 import { createFunnel, type FunnelMode } from './Kanban';
 import { createInbox } from './Inbox';
@@ -45,11 +47,23 @@ export function mountApp(root: ShadowRoot): App {
   });
 
   const lateBadge = h('span', { class: 'rail-badge hidden' });
+  // alterna claro/escuro e guarda a escolha (em Ajustes dá para voltar a seguir o WhatsApp)
+  const themeBtn = h('button', { class: 'rail-btn', on: { click: () => {
+    void saveViewPrefs({ ...state.view, theme: currentTheme() === 'dark' ? 'light' : 'dark' });
+  } } });
+  const renderThemeBtn = () => {
+    const dark = currentTheme() === 'dark';
+    const label = dark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+    themeBtn.replaceChildren(icon(dark ? 'sun' : 'moon', 22));
+    themeBtn.title = label;
+    themeBtn.setAttribute('aria-label', label);
+  };
   const railNav = h('nav', { class: 'rail-nav', 'aria-label': 'Seções do CRM' });
   const rail = h('div', { class: 'rail' },
     h('div', { class: 'rail-mark', title: 'WA Local CRM', 'aria-hidden': 'true' }, icon('chats', 20)),
     railNav,
     h('span', { class: 'kb-spacer' }),
+    themeBtn,
     h('button', { class: 'rail-btn', title: 'Usar o WhatsApp original (Alt+K volta)', 'aria-label': 'Usar o WhatsApp original', on: { click: () => api.hide() } }, icon('whatsapp', 22)));
 
   const settingsMenu = h('nav', { class: 'set-menu', 'aria-label': 'Ajustes' });
@@ -64,6 +78,7 @@ export function mountApp(root: ShadowRoot): App {
   for (const type of ['keydown', 'keypress', 'keyup', 'paste'] as const) shell.addEventListener(type, (e) => e.stopPropagation());
 
   function renderRail() {
+    renderThemeBtn();
     const late = state.contacts.reduce((a, c) => a + c.tasks.filter((t) => !t.done && t.due && t.due < todayStr()).length, 0);
     lateBadge.textContent = String(late);
     lateBadge.classList.toggle('hidden', late === 0);

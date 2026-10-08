@@ -179,7 +179,8 @@ details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 
 /* ---------- visões do Kanban: tarefas e relatório ---------- */
 .seg { display: inline-flex; gap: 4px; }
-.kb-page { flex: 1; overflow-y: auto; padding: 18px 20px; max-width: 1000px; width: 100%; }
+/* conteúdo centralizado até 1240px; o espaço lateral fica no padding para a barra de rolagem continuar na borda */
+.kb-page { flex: 1; overflow-y: auto; width: 100%; padding: 18px max(20px, calc((100% - 1240px) / 2)); }
 .tform { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 10px; margin-bottom: 18px; }
 .tform input, .tform select { margin: 0; width: auto; }
 .tform input:not([type]) { flex: 1; min-width: 200px; }
@@ -331,10 +332,9 @@ input:disabled { opacity: .7; cursor: not-allowed; }
 .import-preview .rep { font-size: 12px; }
 
 /* ---------- painel do relatório ---------- */
-.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 22px; }
-.dash-grid.stages { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.dash-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.dash-grid.stages { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .dash-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.dash-card.wide { grid-column: span 2; }
 .dash-label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .dash-value { font-size: 26px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .delta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -347,7 +347,8 @@ input:disabled { opacity: .7; cursor: not-allowed; }
 .dur b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .dur span { font-size: 11px; color: var(--muted); }
 .dur.empty-dur { display: block; padding: 12px; font-size: 12px; color: var(--muted); text-align: center; }
-@media (max-width: 760px) { .dash-card.wide { grid-column: auto; } }
+@media (max-width: 1000px) { .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- painel do contato (coluna da direita) ---------- */
 .cp-head { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }

@@ -9,7 +9,7 @@ import { checkTaskAlerts } from './notify';
 import { refreshBadges } from './chatList';
 import { readConversations, trackStatus } from './conversations';
 import { loadFonts } from './fonts';
-import { mountShadowRoot } from './injector';
+import { mountShadowRoot, setThemePreference } from './injector';
 import { startObserver } from './observer';
 import { reloadState, setChat, state, watchState } from './state';
 
@@ -17,6 +17,7 @@ async function init() {
   await Promise.all([reloadState(), loadFonts()]);
   await onDataChanged(); // primeiro snapshot: não dispara fluxos para o que já existia
   const root = mountShadowRoot();
+  setThemePreference(state.view.theme);
   const app = mountApp(root);
   const panel = mountPanel(root);
   mountQuickReplyPopup(root);
@@ -32,6 +33,7 @@ async function init() {
   const open = () => { app.open(); syncDock(); };
 
   watchState(async () => {
+    setThemePreference(state.view.theme);
     await onDataChanged(); // fluxos "entra na etapa" e "tag adicionada"
     refreshBadges();
     panel.refresh();

@@ -5,7 +5,7 @@ import { openChat, rowNames } from '../content/chatList';
 import { findLead, isAwaiting, loadMoreConversations, readConversations, setStatus, type ConvRow } from '../content/conversations';
 import { loadOlderMessages, readMessages, waitForChat, type Msg } from '../content/messages';
 import { state } from '../content/state';
-import { clearComposer, clearSearch, replaceTokenWithText, sendComposer, sendFiles, typeInSearch } from '../utils/domHelpers';
+import { clearComposer, clearSearch, replaceTokenWithText, sendComposer, sendFiles, sleep, typeInSearch } from '../utils/domHelpers';
 import { queryAll } from '../utils/domSelectors';
 import { applyVars, avatarColor, fullDate, hashHue, initials, looseName, normalizeName, relTime, tagHue } from '../utils/format';
 import { contactPanel, fieldVars, leadFor } from './ContactPanel';
@@ -404,7 +404,15 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   async function sendPhotos(key: string, caption: string) {
     sending = true;
     renderTray();
-    const result = await sendFiles(files.map((f) => f.file), caption);
+    const { status: result, captionOk } = await sendFiles(files.map((f) => f.file), caption);
+    // a legenda não entrou no editor do WhatsApp: o texto vai logo depois, como mensagem, para não se perder
+    const textApart = result === 'sent' && !!caption && !captionOk;
+    if (textApart) {
+      await sleep(400);
+      await clearComposer();
+      await replaceTokenWithText(0, caption);
+      await sendComposer(false);
+    }
     sending = false;
     if (result === 'sent' || result === 'not-confirmed') {
       clearFiles();
@@ -412,7 +420,7 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
       drafts.delete(key);
       window.setTimeout(() => renderMessages(), 700);
     } else renderTray();
-    if (result === 'sent') toast(root, 'Foto enviada.');
+    if (result === 'sent') toast(root, textApart ? 'Foto enviada. O texto foi logo em seguida, como mensagem.' : 'Foto enviada.');
     else if (result === 'not-confirmed') { toast(root, 'Confira no WhatsApp original se a foto saiu.'); opts.showWhatsApp(); }
     else if (result === 'no-editor') { toast(root, 'O WhatsApp não abriu o editor de foto. Abri o WhatsApp original para você enviar por lá.'); opts.showWhatsApp(); }
     else toast(root, 'Abra uma conversa antes de enviar a foto.');
