@@ -57,6 +57,7 @@ export interface Msg {
   author: string;
   media?: string; // "áudio", "foto"… quando o balão é (ou tem) mídia
   img?: string; // foto: blob: do próprio WhatsApp (mesma página, dá para exibir na nossa tela)
+  link?: string; // localização: link do mapa
   at?: number; // horário completo, quando o WhatsApp informa a data (balões de texto)
 }
 
@@ -68,6 +69,11 @@ function parseStamp(raw: string): number | undefined {
   const t = new Date(y!, mo! - 1, d!, hh, mm).getTime();
   return Number.isNaN(t) ? undefined : t;
 }
+
+/** Link do mapa de uma mensagem de localização (só endereços de mapa conhecidos). */
+const mapLinkOf = (row: HTMLElement) =>
+  Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href]')).map((a) => a.href)
+    .find((u) => /^https:\/\/(maps\.google\.|www\.google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/.test(u));
 
 const photoOf = (row: HTMLElement) =>
   Array.from(row.querySelectorAll<HTMLImageElement>('img[src^="blob:"]')).find((i) => i.getBoundingClientRect().width >= 80)?.src;
@@ -113,7 +119,8 @@ export function readMessages(chatName: string, limit = 40): Msg[] {
     const media = detectMedia(row);
     if (!media) return;
     const img = media.label === 'foto' ? photoOf(row) : undefined;
-    units.push({ node: row, msg: { out: isOutgoing(media.el, root, '', chatName, isGroup), text: `[${media.label}]`, time: timeOf(row), author: '', media: media.label, img } });
+    const link = media.label === 'localização' ? mapLinkOf(row) : undefined;
+    units.push({ node: row, msg: { out: isOutgoing(media.el, root, '', chatName, isGroup), text: `[${media.label}]`, time: timeOf(row), author: '', media: media.label, img, link } });
   });
 
   units.sort((a, b) => (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));

@@ -1,22 +1,25 @@
-import type { FieldDef, QuickReply } from '../types';
-import { getQuickReplies, getTagColors, saveAutomations, saveFields, saveQuickReplies, saveTagColors, saveViewPrefs } from '../storage/chromeStore';
+import type { FieldDef, QuickReply, Template } from '../types';
+import { getQuickReplies, getTagColors, saveAutomations, saveFields, saveProducts, saveQuickReplies, saveTagColors, saveTemplates, saveViewPrefs } from '../storage/chromeStore';
 import { putContact } from '../storage/db';
 import { emitDataChange } from '../storage/bus';
 import { exportBackup, importBackup } from '../storage/backup';
 import { collectDiagnostics } from '../content/diagnostics';
+import { applyImport, planImport, type ImportPlan } from '../content/csv';
 import { state } from '../content/state';
-import { slug, tagHue, todayStr } from '../utils/format';
+import { money, slug, tagHue, todayStr } from '../utils/format';
 import { aiView } from './AiPanel';
 import { flowsView } from './Flows';
 import { icon, type IconName } from './icons';
-import { h, toast, uid } from './h';
+import { fieldError, h, toast, uid } from './h';
 
-export type SettingsSection = 'tags' | 'fields' | 'replies' | 'flows' | 'ai' | 'data';
+export type SettingsSection = 'tags' | 'fields' | 'catalog' | 'replies' | 'templates' | 'flows' | 'ai' | 'data';
 
 export const SETTINGS_MENU: [SettingsSection, string, IconName][] = [
   ['tags', 'Etiquetas', 'tag'],
   ['fields', 'Campos personalizados', 'textbox'],
+  ['catalog', 'Catálogo', 'package'],
   ['replies', 'Respostas rápidas', 'lightning'],
+  ['templates', 'Modelos de mensagem', 'template'],
   ['flows', 'Fluxos de automação', 'flows'],
   ['ai', 'Assistente de IA', 'robot'],
   ['data', 'Dados e backup', 'database'],
@@ -147,6 +150,95 @@ function fieldsView(root: ShadowRoot): Node[] {
   ];
 }
 
+/* ---------- catálogo ---------- */
+
+function catalogView(root: ShadowRoot): Node[] {
+  const name = h('input', { id: 'np-name', placeholder: 'Ex.: Kit completo com instalação' });
+  const price = h('input', { id: 'np-price', type: 'number', min: '0', step: '1', placeholder: '0' });
+  const err = fieldError();
+  name.addEventListener('input', () => err.clear(name));
+  price.addEventListener('input', () => err.clear(price));
+  const add = async () => {
+    const n = name.value.trim();
+    const p = Math.round(Number(price.value));
+    if (!n) return err.show(name, 'Dê um nome ao produto.');
+    if (!Number.isFinite(p) || p <= 0) return err.show(price, 'Informe um preço maior que zero.');
+    await saveProducts([...state.products, { id: uid(), name: n, price: p }]);
+    toast(root, `"${n}" entrou no catálogo.`);
+  };
+  const list = state.products.length
+    ? h('div', { class: 'set-list' }, ...state.products.map((p) => {
+        const nm = h('input', { value: p.name, 'aria-label': 'Nome do produto ' + p.name });
+        const pr = h('input', { type: 'number', min: '0', value: String(p.price), 'aria-label': 'Preço de ' + p.name, class: 'price' });
+        const update = () => {
+          const n = nm.value.trim() || p.name;
+          const v = Math.max(0, Math.round(Number(pr.value)) || p.price);
+          void saveProducts(state.products.map((x) => (x.id === p.id ? { ...x, name: n, price: v } : x)));
+        };
+        nm.addEventListener('change', update);
+        pr.addEventListener('change', update);
+        const uses = state.contacts.filter((c) => c.items?.some((i) => i.productId === p.id)).length;
+        return h('div', { class: 'set-row' }, icon('package'), nm, h('span', { class: 'muted' }, 'R$'), pr,
+          h('span', { class: 'muted' }, uses ? `em ${uses} negócio${uses > 1 ? 's' : ''}` : 'sem uso'),
+          h('button', { class: 'x danger', title: 'Tirar do catálogo', 'aria-label': 'Tirar ' + p.name + ' do catálogo', on: { click: () => {
+            if (confirm(`Tirar "${p.name}" do catálogo? Os negócios que já têm este produto continuam com ele.`)) void saveProducts(state.products.filter((x) => x.id !== p.id));
+          } } }, icon('trash')));
+      }))
+    : h('div', { class: 'empty' }, icon('package'), 'Catálogo vazio.', 'Cadastre produtos ou serviços para montar o valor de cada negócio.');
+  return [
+    h('p', { class: 'muted lead' }, 'Na conversa, adicione produtos ao lead e o valor do negócio é calculado sozinho. Mudar o preço aqui não altera negócios já montados.'),
+    list,
+    h('div', { class: 'sec form-card' }, h('h4', {}, 'Novo produto ou serviço'),
+      h('label', { class: 'field', for: 'np-name' }, 'Nome'), name,
+      h('label', { class: 'field', for: 'np-price' }, 'Preço (R$)'), price,
+      err.el,
+      h('button', { class: 'btn', on: { click: () => void add() } }, icon('plus'), 'Adicionar ao catálogo')),
+  ];
+}
+
+/* ---------- modelos de mensagem ---------- */
+
+let editingTemplate: string | null = null;
+
+function templatesView(root: ShadowRoot, refresh: () => void): Node[] {
+  const editing = state.templates.find((t) => t.id === editingTemplate);
+  const title = h('input', { id: 'tp-title', placeholder: 'Ex.: Envio de proposta', value: editing?.title ?? '' });
+  const category = h('input', { id: 'tp-cat', placeholder: 'Ex.: Vendas', list: 'tp-cats', value: editing?.category ?? '' });
+  const cats = [...new Set(state.templates.map((t) => t.category))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const text = h('textarea', { id: 'tp-text', rows: 5, placeholder: '{saudacao}, {primeiro_nome}! Segue a proposta que combinamos.' }, editing?.text ?? '');
+  const err = fieldError();
+  title.addEventListener('input', () => err.clear(title));
+  text.addEventListener('input', () => err.clear(text));
+  const vars = ['{nome}', '{primeiro_nome}', '{saudacao}', '{data}', ...state.fields.map((f) => `{${slug(f.name)}}`)].join(' ');
+  const save = async () => {
+    if (!title.value.trim()) return err.show(title, 'Dê um título ao modelo.');
+    if (!text.value.trim()) return err.show(text, 'Escreva o texto do modelo.');
+    const item: Template = { id: editing?.id ?? uid(), title: title.value.trim(), category: category.value.trim() || 'Geral', text: text.value };
+    await saveTemplates(editing ? state.templates.map((t) => (t.id === editing.id ? item : t)) : [...state.templates, item]);
+    editingTemplate = null;
+    toast(root, editing ? 'Modelo atualizado.' : 'Modelo criado.');
+    refresh();
+  };
+  const groups = cats.map((cat) => h('div', { class: 'tpl-group' }, h('h4', {}, cat),
+    h('div', { class: 'set-list' }, ...state.templates.filter((t) => t.category === cat).map((t) => h('div', { class: 'set-row reply' + (t.id === editingTemplate ? ' editing' : '') },
+      h('div', { class: 'grow' }, h('b', {}, t.title), h('small', {}, t.text)),
+      h('button', { class: 'x', title: 'Editar', 'aria-label': 'Editar modelo ' + t.title, on: { click: () => { editingTemplate = t.id; refresh(); } } }, icon('gear')),
+      h('button', { class: 'x danger', title: 'Apagar', 'aria-label': 'Apagar modelo ' + t.title, on: { click: () => { if (confirm(`Apagar o modelo "${t.title}"?`)) void saveTemplates(state.templates.filter((x) => x.id !== t.id)); } } }, icon('trash')))))));
+  return [
+    h('p', { class: 'muted lead' }, 'Modelos são mensagens prontas e mais longas, organizadas por categoria. Use pelo botão de documento ao lado do campo de mensagem.'),
+    ...(groups.length ? groups : [h('div', { class: 'empty' }, icon('template'), 'Nenhum modelo.', 'Crie o primeiro abaixo.')]),
+    h('div', { class: 'sec form-card' }, h('h4', {}, editing ? `Editando "${editing.title}"` : 'Novo modelo'),
+      h('label', { class: 'field', for: 'tp-title' }, 'Título'), title,
+      h('label', { class: 'field', for: 'tp-cat' }, 'Categoria'), category, h('datalist', { id: 'tp-cats' }, ...cats.map((c) => h('option', { value: c }))),
+      h('label', { class: 'field', for: 'tp-text' }, 'Texto'), text,
+      h('p', { class: 'muted' }, 'Variáveis: ' + vars),
+      err.el,
+      h('div', { class: 'inline' },
+        h('button', { class: 'btn', on: { click: () => void save() } }, editing ? 'Salvar alterações' : 'Criar modelo'),
+        editing ? h('button', { class: 'btn ghost', on: { click: () => { editingTemplate = null; refresh(); } } }, 'Cancelar') : null)),
+  ];
+}
+
 /* ---------- respostas rápidas ---------- */
 
 let editingReply: string | null = null;
@@ -187,9 +279,58 @@ async function repliesView(root: ShadowRoot, refresh: () => void): Promise<Node[
   ];
 }
 
+/* ---------- importar leads por CSV ---------- */
+
+let pendingImport: { plan: ImportPlan; file: string } | null = null;
+
+function importSection(root: ShadowRoot, refresh: () => void): HTMLElement {
+  const file = h('input', { type: 'file', accept: '.csv,text/csv', class: 'hidden', on: { change: async (e) => {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (!f) return;
+    try {
+      pendingImport = { plan: planImport(await f.text()), file: f.name };
+    } catch (err) {
+      pendingImport = null;
+      toast(root, err instanceof Error ? err.message : String(err));
+    }
+    refresh();
+  } } });
+  const card = h('div', { class: 'sec form-card wide' }, h('h4', {}, 'Importar leads (CSV)'),
+    h('p', { class: 'muted' }, 'A primeira linha precisa ter os nomes das colunas. Reconheço Nome, Telefone, Etapa, Tags, Valor, Nota e os seus campos personalizados. Leads que já existem são completados, nada é apagado.'),
+    h('button', { class: 'btn ghost', on: { click: () => file.click() } }, icon('arrow-up'), 'Escolher arquivo CSV'), file);
+  const p = pendingImport;
+  if (!p) return card;
+
+  const { rows } = p.plan;
+  const novos = rows.filter((r) => !r.existing).length;
+  const stageLabel = (r: (typeof rows)[number]) => (r.stageId === undefined ? (r.stageName ? `${r.stageName} (não existe)` : '') : r.stageId === null ? 'Sem etapa' : state.stages.find((s) => s.id === r.stageId)?.name ?? '');
+  card.append(
+    h('div', { class: 'import-preview' },
+      h('p', {}, h('b', {}, p.file), `: ${novos} novo${novos === 1 ? '' : 's'}, ${rows.length - novos} já no CRM${p.plan.skipped ? `, ${p.plan.skipped} linha(s) sem nome nem telefone ignorada(s)` : ''}.`),
+      h('p', { class: 'muted' }, 'Colunas usadas: ' + (p.plan.recognized.join(', ') || 'nenhuma') + (p.plan.unknown.length ? `. Ignoradas: ${p.plan.unknown.join(', ')}` : '') + '.'),
+      p.plan.unknownStages.length ? h('p', { class: 'field-err' }, `Etapas que não existem no funil (os leads entram sem mudar de etapa): ${p.plan.unknownStages.join(', ')}.`) : null,
+      h('table', { class: 'rep' },
+        h('thead', {}, h('tr', {}, ...['', 'Nome', 'Telefone', 'Etapa', 'Tags', 'Valor'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, ...rows.slice(0, 8).map((r) => h('tr', {},
+          h('td', {}, h('span', { class: 'heat ' + (r.existing ? 'frio' : 'morno') }, r.existing ? 'Atualiza' : 'Novo')),
+          h('td', {}, r.name), h('td', { class: 'num' }, r.phone ? '+' + r.phone : '-'), h('td', {}, stageLabel(r)),
+          h('td', {}, r.tags.join(', ')), h('td', { class: 'num' }, r.value ? money(r.value) : '-'))))),
+      rows.length > 8 ? h('p', { class: 'muted' }, `E mais ${rows.length - 8} linha(s).`) : null,
+      h('div', { class: 'inline' },
+        h('button', { class: 'btn', on: { click: async (e) => {
+          (e.currentTarget as HTMLButtonElement).setAttribute('disabled', '');
+          const { created, updated } = await applyImport(p.plan);
+          pendingImport = null;
+          toast(root, `Importação concluída: ${created} lead(s) novo(s), ${updated} atualizado(s).`);
+          refresh();
+        } } }, `Importar ${rows.length} lead${rows.length === 1 ? '' : 's'}`),
+        h('button', { class: 'btn ghost', on: { click: () => { pendingImport = null; refresh(); } } }, 'Cancelar'))));
+  return card;
+}
+
 /* ---------- dados ---------- */
 
-function dataView(root: ShadowRoot): Node[] {
+function dataView(root: ShadowRoot, refresh: () => void): Node[] {
   const file = h('input', { type: 'file', accept: 'application/json', class: 'hidden', on: { change: async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
@@ -197,10 +338,15 @@ function dataView(root: ShadowRoot): Node[] {
     try { toast(root, `${await importBackup(await f.text())} contatos importados.`); } catch (err) { toast(root, String(err)); }
   } } });
   return [
-    h('div', { class: 'sec form-card' }, h('h4', {}, 'Ao abrir o WhatsApp'),
+    h('div', { class: 'sec form-card' }, h('h4', {}, 'Abertura e avisos'),
       h('label', { class: 'check', for: 'set-autoopen' },
         h('input', { id: 'set-autoopen', type: 'checkbox', checked: state.view.autoOpen, on: { change: (e) => void saveViewPrefs({ ...state.view, autoOpen: (e.target as HTMLInputElement).checked }) } }),
-        'Abrir o CRM em tela cheia assim que o WhatsApp carregar')),
+        'Abrir o CRM em tela cheia assim que o WhatsApp carregar'),
+      h('label', { class: 'check', for: 'set-notify' },
+        h('input', { id: 'set-notify', type: 'checkbox', checked: state.view.notifyTasks, on: { change: (e) => void saveViewPrefs({ ...state.view, notifyTasks: (e.target as HTMLInputElement).checked }) } }),
+        'Avisar no computador quando uma tarefa vence hoje ou atrasa'),
+      h('p', { class: 'muted' }, 'O aviso só aparece com o WhatsApp Web aberto em alguma aba, mesmo em segundo plano.')),
+    importSection(root, refresh),
     h('div', { class: 'sec form-card' }, h('h4', {}, 'Backup'),
       h('p', { class: 'muted' }, 'Tudo fica só neste navegador. Exporte de vez em quando para não perder nada. A chave da IA não entra no arquivo.'),
       h('div', { class: 'inline' },
@@ -226,10 +372,12 @@ export async function settingsContent(root: ShadowRoot, section: SettingsSection
   switch (section) {
     case 'tags': return tagsView(root);
     case 'fields': return fieldsView(root);
+    case 'catalog': return catalogView(root);
+    case 'templates': return templatesView(root, refresh);
     case 'replies': return repliesView(root, refresh);
     case 'flows': return flowsView(root, refresh);
     case 'ai': return aiView(root, refresh);
-    case 'data': return dataView(root);
+    case 'data': return dataView(root, refresh);
   }
 }
 

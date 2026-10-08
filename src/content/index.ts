@@ -5,6 +5,7 @@ import { h, toast } from '../components/h';
 import { icon } from '../components/icons';
 import { scheduleAutoAnalysis } from './ai';
 import { checkStale, initAutomation, onDataChanged, onIncomingMessage } from './automation';
+import { checkTaskAlerts } from './notify';
 import { refreshBadges } from './chatList';
 import { readConversations, trackStatus } from './conversations';
 import { loadFonts } from './fonts';
@@ -45,6 +46,19 @@ async function init() {
   }, true);
   document.addEventListener('wacrm-show-whatsapp', () => syncDock());
   new MutationObserver(syncDock).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+  // avisos de tarefa (vence hoje, atrasada) e o clique no aviso, que chega do service worker
+  const alerts = () => void checkTaskAlerts().catch((err) => console.warn('[WA CRM] avisos de tarefa', err));
+  window.setTimeout(alerts, 15000);
+  window.setInterval(alerts, 5 * 60_000);
+  chrome.runtime.onMessage.addListener((msg: { type?: string; key?: string }) => {
+    if (msg?.type === 'wacrm-open-tasks') { app.show('tasks'); syncDock(); }
+    if (msg?.type === 'wacrm-open-lead') {
+      const lead = state.contacts.find((c) => c.phone === msg.key);
+      app.show('inbox', lead);
+      syncDock();
+    }
+  });
 
   // abre o CRM assim que o WhatsApp terminar de carregar (sem login, a tela do QR code continua visível)
   if (state.view.autoOpen) {

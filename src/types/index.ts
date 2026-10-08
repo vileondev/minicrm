@@ -27,6 +27,7 @@ export interface Task {
   done: boolean;
   createdAt: number;
   due?: string; // YYYY-MM-DD
+  doneAt?: number; // quando foi concluída (métricas do painel)
 }
 
 export interface Note {
@@ -58,11 +59,35 @@ export interface Contact {
   awaitingSince?: number; // cliente mandou a última mensagem e ainda não foi respondido (desde quando)
   lastMsgAt?: number; // última mensagem vista nesta conversa (qualquer lado)
   fields?: Record<string, string>; // valores dos campos personalizados, por id do campo
+  items?: DealItem[]; // produtos do catálogo neste negócio; se houver, o valor é a soma deles
   createdAt: number;
   updatedAt: number;
 }
 
 export type ConvStatus = 'open' | 'resolved';
+
+/** Produto ou serviço do catálogo. */
+export interface Product {
+  id: string;
+  name: string;
+  price: number; // em reais
+}
+
+/** Item de um negócio: guarda nome e preço do momento em que foi adicionado. */
+export interface DealItem {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
+/** Modelo de mensagem: texto mais longo, organizado por categoria (as respostas rápidas são os atalhos com /). */
+export interface Template {
+  id: string;
+  title: string;
+  category: string;
+  text: string;
+}
 
 /** Campo personalizado criado pelo usuário (aparece no painel, no CSV, na busca e como variável {slug}). */
 export interface FieldDef {
@@ -83,6 +108,7 @@ export interface ViewPrefs {
   showInternal: boolean;
   statusFilter: 'all' | 'awaiting' | 'open' | 'resolved';
   autoOpen: boolean; // abre o CRM em tela cheia assim que o WhatsApp carrega
+  notifyTasks: boolean; // avisos do sistema para tarefas que vencem hoje ou atrasaram
 }
 
 export interface ChatContext {

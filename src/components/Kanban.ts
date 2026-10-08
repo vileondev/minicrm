@@ -4,7 +4,7 @@ import { blankContact, deleteContact, getOrCreateContact, putContact, rekeyConta
 import { emitDataChange } from '../storage/bus';
 import { openChat, visibleChatNames } from '../content/chatList';
 import { analyzeChat } from '../content/ai';
-import { funnelStats, inFunnel, isGroupContact, stageProbability, weightedValue } from '../content/metrics';
+import { DAY_MS, funnelStats, inFunnel, isGroupContact, periodStats, stageProbability, weightedValue } from '../content/metrics';
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
@@ -44,6 +44,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
   let editing: string | null = null;
   let sortBy: 'recent' | 'score' | 'value' = 'recent';
   let mode: FunnelMode = 'board';
+  let reportDays = 30; // período do painel do relatório
   let chatFor: string | null = null; // contato com o chat aberto dentro do card
   let chatError: string | null = null;
   const drafts = new Map<string, string>(); // rascunhos por contato
@@ -102,7 +103,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
     if (msgs.length) {
-      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (m.media && m.text === `[${m.media}]` ? ' media' : '') }, group && !m.out && m.author ? h('div', { class: 'author', style: `--h:${hashHue(m.author)}` }, m.author) : null, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, h('span', { class: 'time' }, m.time))));
+      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (m.media && m.text === `[${m.media}]` ? ' media' : '') }, group && !m.out && m.author ? h('div', { class: 'author', style: `--h:${hashHue(m.author)}` }, m.author) : null, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, m.link ? h('a', { class: 'maplink', href: m.link, target: '_blank', rel: 'noopener noreferrer' }, icon('map', 14), 'Abrir no mapa') : null, h('span', { class: 'time' }, m.time))));
     } else if (chatError) {
       const openNow = state.chat && !sameChat(c) ? state.chat : null;
       box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), h('span', {}, chatError,
@@ -304,9 +305,11 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
   function exportCsv() {
     const stages = new Map(state.stages.map((s) => [s.id, s.name]));
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const rows = [['Nome', 'Chave', 'Telefone', 'Etapa', 'Tags', 'Valor', 'Valor ponderado', 'Tarefas abertas', 'Interno', 'Última nota'].map(esc).join(';')];
+    const fields = state.fields;
+    const rows = [['Nome', 'Chave', 'Telefone', 'Etapa', 'Tags', 'Valor', 'Valor ponderado', 'Produtos', 'Tarefas abertas', 'Interno', 'Última nota', ...fields.map((f) => f.name)].map(esc).join(';')];
     for (const c of state.contacts) rows.push([c.name, c.phone, c.number ?? '', stages.get(c.stageId ?? '') ?? '', c.tags.join(', '), c.value, Math.round(weightedValue(c)),
-      openTasks(c), c.internal ? 'sim' : '', c.notes[0]?.text ?? ''].map(esc).join(';'));
+      (c.items ?? []).map((i) => `${i.qty}x ${i.name}`).join(', '), openTasks(c), c.internal ? 'sim' : '', c.notes[0]?.text ?? '',
+      ...fields.map((f) => c.fields?.[f.id] ?? '')].map(esc).join(';'));
     const url = URL.createObjectURL(new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
     h('a', { href: url, download: 'leads.csv' }).click();
     URL.revokeObjectURL(url);
@@ -383,7 +386,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
     const row = ({ c, t }: { c: Contact; t: Task }) => {
       const late = !!t.due && t.due < today;
       return h('div', { class: 'trow' + (late ? ' late' : '') },
-        h('input', { type: 'checkbox', 'aria-label': 'Concluir tarefa', on: { change: () => void updateTask(c, t, { done: true }) } }),
+        h('input', { type: 'checkbox', 'aria-label': 'Concluir tarefa', on: { change: () => void updateTask(c, t, { done: true, doneAt: Date.now() }) } }),
         h('div', { class: 'avatar', style: `background:${avatarColor(c.name)}` }, initials(c.name)),
         h('div', { class: 'grow' }, h('b', {}, t.text), h('span', { class: 'muted' }, c.name)),
         t.due ? h('span', { class: 'due', title: new Date(t.due + 'T00:00').toLocaleDateString('pt-BR') }, relDay(t.due)) : null,
@@ -401,15 +404,54 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
   /* ---------- relatório do funil ---------- */
 
   function reportView(): HTMLElement {
-    const list = state.contacts.filter(inFunnel);
+    const list = state.contacts.filter(inFunnel).filter((c) => !tagFilter || c.tags.includes(tagFilter));
+    const now = Date.now();
+    const span = reportDays * DAY_MS;
+    const cur = periodStats(list, now - span, now);
+    const prev = periodStats(list, now - 2 * span, now - span);
     const stats = funnelStats(list);
     const max = Math.max(1, ...stats.map((s) => s.entered));
     const days = (d: number | null) => (d === null ? '-' : d < 1 ? '< 1 dia' : `${d.toFixed(d < 10 ? 1 : 0).replace('.', ',')} dias`);
     const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) + '%' : '-');
     const first = stats[0];
     const last = stats[stats.length - 1];
+    const prevLabel = `vs ${reportDays} dias anteriores`;
+
+    /** Variação contra o período anterior. `lowerIsBetter` inverte as cores (ex.: tempo até fechar). */
+    const delta = (a: number | null, b: number | null, lowerIsBetter = false) => {
+      if (a === null || b === null) return h('span', { class: 'delta' }, 'sem base para comparar');
+      if (b === 0) return h('span', { class: 'delta' }, a > 0 ? `nada nos ${reportDays} dias anteriores` : `igual ${prevLabel}`);
+      const d = Math.round(((a - b) / b) * 100);
+      const good = lowerIsBetter ? d < 0 : d > 0;
+      return h('span', { class: 'delta' + (d === 0 ? '' : good ? ' up' : ' down') }, `${d > 0 ? '+' : ''}${d}% ${prevLabel}`);
+    };
+    const card = (label: string, value: string, d: HTMLElement, hint: string) =>
+      h('div', { class: 'dash-card', title: hint }, h('span', { class: 'dash-label' }, label), h('b', { class: 'dash-value' }, value), d);
+
+    /** Duração em blocos de dias, horas e minutos. */
+    const blocks = (ms: number | null) => {
+      if (ms === null) return h('div', { class: 'dur empty-dur' }, 'Sem dados no período');
+      const total = Math.round(ms / 60000);
+      const parts: [number, string][] = [[Math.floor(total / 1440), 'dias'], [Math.floor((total % 1440) / 60), 'horas'], [total % 60, 'minutos']];
+      return h('div', { class: 'dur' }, ...parts.map(([n, unit]) => h('div', {}, h('b', {}, String(n)), h('span', {}, n === 1 ? unit.replace(/s$/, '') : unit))));
+    };
 
     return h('div', { class: 'kb-page' },
+      h('div', { class: 'dash-grid' },
+        card('Leads novos', String(cur.newLeads), delta(cur.newLeads, prev.newLeads), 'Contatos que entraram no CRM no período'),
+        card('Avançaram de etapa', String(cur.advanced), delta(cur.advanced, prev.advanced), 'Leads que foram para uma etapa mais à frente no período'),
+        card('Vendas fechadas', String(cur.won), delta(cur.won, prev.won), `Leads que chegaram a "${last?.stage.name ?? 'última etapa'}" no período`),
+        card('Valor ganho', money(cur.wonValue), delta(cur.wonValue, prev.wonValue), 'Soma do valor das vendas fechadas no período'),
+        card('Tarefas concluídas', String(cur.tasksDone), delta(cur.tasksDone, prev.tasksDone), 'Tarefas marcadas como feitas no período'),
+        h('div', { class: 'dash-card wide', title: 'Da entrada no CRM até a última etapa, para as vendas fechadas no período' },
+          h('span', { class: 'dash-label' }, 'Tempo médio até fechar'), blocks(cur.timeToClose), delta(cur.timeToClose, prev.timeToClose, true))),
+
+      h('h3', { class: 'dash-title' }, 'Tempo médio em cada etapa'),
+      h('div', { class: 'dash-grid stages' }, ...stats.map((s) => h('div', { class: 'dash-card' },
+        h('span', { class: 'dash-label' }, h('span', { class: 'dot', style: `background:${s.stage.color}` }), ' ', s.stage.name),
+        blocks(s.avgDays === null ? null : s.avgDays * DAY_MS)))),
+
+      h('h3', { class: 'dash-title' }, 'Funil completo'),
       h('table', { class: 'rep' },
         h('thead', {}, h('tr', {}, ...['Etapa', 'Passaram', 'Agora', 'Avançaram', 'Tempo médio', 'Valor', 'Ponderado'].map((t) => h('th', {}, t)))),
         h('tbody', {}, ...stats.map((s) => h('tr', {},
@@ -424,7 +466,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
       h('p', { class: 'muted' },
         `Leads sem etapa: ${list.filter((c) => !c.stageId).length}. `,
         first && last && first !== last ? `De "${first.stage.name}" até "${last.stage.name}": ${pct(last.entered, first.entered)}. ` : '',
-        'O histórico de etapas começou a ser gravado nesta versão: leads antigos contam a partir da etapa em que estavam.'));
+        'O histórico de etapas começou a ser gravado na versão 0.4: leads mais antigos contam a partir da etapa em que estavam.'));
   }
 
   /* ---------- topo e troca de visão ---------- */
@@ -483,7 +525,9 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
           h('div', { class: 'metric' + (awaiting ? ' warn' : '') }, h('span', {}, 'Aguardando resposta'), h('b', {}, awaiting))),
         h('span', { class: 'kb-spacer' }),
         mode !== 'report' ? h('div', { class: 'search' }, icon('search'), search) : null,
-        mode === 'board' ? tagSel : null,
+        mode !== 'tasks' ? tagSel : null,
+        mode === 'report' ? h('select', { 'aria-label': 'Período', on: { change: (e) => { reportDays = Number((e.target as HTMLSelectElement).value); render(); } } },
+          ...[7, 30, 90].map((d) => h('option', { value: String(d), selected: reportDays === d }, `Últimos ${d} dias`))) : null,
         mode === 'board' ? h('select', { 'aria-label': 'Filtrar por status', on: { change: (e) => void setView({ statusFilter: (e.target as HTMLSelectElement).value as typeof state.view.statusFilter }) } },
           ...([['all', 'Todos os status'], ['awaiting', 'Aguardando resposta'], ['open', 'Abertas'], ['resolved', 'Resolvidas']] as const).map(([v, l]) =>
             h('option', { value: v, selected: state.view.statusFilter === v }, l))) : null,

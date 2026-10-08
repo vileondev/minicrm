@@ -27,17 +27,21 @@ Assim que o WhatsApp Web carrega, o CRM abre em tela cheia por cima dele. O What
 |---|---|
 | **Caixa de entrada** | Conversas, chat e dados do contato lado a lado. Filtros por aguardando resposta, leads e resolvidas. |
 | **Status da conversa** | Aberta ou resolvida. A extensão marca quem está esperando resposta e reabre a conversa se o cliente escrever de novo. |
-| **Funil de vendas** | Arraste leads entre etapas, filtre por tag e status, ordene pelos mais quentes e exporte CSV. |
+| **Funil de vendas** | Arraste leads entre etapas, filtre por tag e status, ordene pelos mais quentes e exporte ou importe CSV. |
 | **Tarefas** | Todas as tarefas de todos os leads, agrupadas em atrasadas, hoje e próximos dias. |
-| **Relatório do funil** | Quantos leads passaram por cada etapa, conversão, tempo médio e valor ponderado. |
+| **Relatório** | Leads novos, vendas fechadas, valor ganho, tarefas concluídas e tempo até fechar, comparados com o período anterior. Tempo médio em cada etapa e conversão do funil. |
 | **Campos personalizados** | Crie campos como cidade ou forma de pagamento. Eles entram no painel, na busca, no CSV e nas respostas rápidas. |
 | **Etiquetas** | Cores, renomear e apagar em um lugar só, valendo para todos os contatos e fluxos. |
 | **Respostas rápidas** | Digite `/` no campo de mensagem. Aceita `{nome}`, `{primeiro_nome}`, `{saudacao}`, `{data}` e os seus campos. |
+| **Fotos** | Envie fotos pelo CRM: botão, Ctrl+V ou arrastar, com legenda. |
+| **Modelos de mensagem** | Mensagens prontas por categoria, com os mesmos campos das respostas rápidas. |
+| **Catálogo** | Produtos e serviços com preço. Adicione ao lead e o valor do negócio é calculado sozinho. |
+| **Avisos de tarefa** | Aviso no computador quando uma tarefa vence hoje ou atrasa. Clicar abre a conversa. |
 | **Transcrição** | Copie ou baixe a conversa em .txt, com autor e horário. |
 | **Automações locais** | "Lead parado 3 dias → criar follow-up", "cliente pediu preço → mover etapa". Nenhuma automação envia mensagem. |
 | **Assistente de IA (opcional)** | Com a sua chave da Anthropic, OpenAI ou Google Gemini: temperatura do lead, resumo, próximo passo e rascunho de resposta. Você revisa e envia. |
 | **Grupos e internos** | Grupos ficam fora do funil por padrão; contatos da equipe podem ser marcados como internos. |
-| **Backup** | Exporte e importe tudo em JSON. |
+| **Importar e exportar** | Importe leads por CSV com prévia antes de gravar. Backup completo em JSON. |
 
 <table>
   <tr>
@@ -49,11 +53,11 @@ Assim que o WhatsApp Web carrega, o CRM abre em tela cheia por cima dele. O What
     <td align="center">Tarefas</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/report.png" alt="Relatório do funil com conversão e tempo médio por etapa"></td>
+    <td width="50%"><img src="docs/screenshots/report.png" alt="Relatório com métricas do período, tempo médio em cada etapa e conversão do funil"></td>
     <td width="50%"><img src="docs/screenshots/settings.png" alt="Ajustes com campos personalizados e as variáveis geradas"></td>
   </tr>
   <tr>
-    <td align="center">Relatório do funil</td>
+    <td align="center">Relatório</td>
     <td align="center">Ajustes</td>
   </tr>
 </table>
@@ -73,8 +77,8 @@ não entra no backup.
 ## Como funciona
 
 A extensão lê a página do WhatsApp Web, guarda o CRM no próprio navegador e desenha o app em tela cheia por cima,
-isolado num Shadow DOM. Só o assistente de IA, quando ligado, faz chamadas externas, e elas saem do service worker
-direto para o provedor que você escolheu.
+isolado num Shadow DOM. O service worker mostra os avisos de tarefa do sistema e, só quando o assistente de IA está
+ligado, faz as chamadas externas, direto para o provedor que você escolheu.
 
 ```mermaid
 flowchart LR
@@ -82,21 +86,24 @@ flowchart LR
 
     subgraph EXT["Extensão (no seu navegador)"]
         direction TB
-        CS["Content script<br/>observer, leitura de mensagens,<br/>fluxos de automação"]
+        CS["Content script<br/>observer, leitura de mensagens,<br/>fluxos, avisos de tarefa"]
         UI["App em tela cheia (Shadow DOM)<br/>conversas, funil, tarefas, relatório, ajustes"]
         DB[("IndexedDB<br/>contatos, tarefas, notas")]
-        ST[("chrome.storage<br/>etapas, respostas, fluxos")]
-        SW["Service worker<br/>(só para a IA)"]
+        ST[("chrome.storage<br/>etapas, respostas, modelos,<br/>catálogo, campos, fluxos")]
+        SW["Service worker<br/>avisos e IA"]
     end
 
     AI["API de IA<br/>Anthropic, OpenAI ou Gemini"]
+    OS["Avisos do sistema"]
 
     WA -- "lê o DOM" --> CS
     CS -- "abre conversas e<br/>insere rascunhos" --> WA
     CS <--> UI
     CS <--> DB
     CS <--> ST
-    CS -. "opcional, com a sua chave" .-> SW
+    CS -- "tarefa vence hoje<br/>ou atrasou" --> SW
+    SW --> OS
+    CS -. "IA opcional, com a sua chave" .-> SW
     SW -. "HTTPS" .-> AI
 ```
 
@@ -157,10 +164,13 @@ Se você baixou o ZIP, baixe de novo e repita os passos 3 e 4.
 1. Abra o WhatsApp Web. O CRM aparece sozinho quando ele termina de carregar (dá para desligar em **Ajustes → Dados e backup**).
 2. Em **Conversas**, escolha uma conversa e clique em **Adicionar ao funil**. Na coluna da direita, defina etapa, valor, tags, campos e tarefas.
 3. Responda pelo campo de mensagem e marque **Resolver** quando terminar. Se o cliente escrever de novo, a conversa reabre.
-4. Em **Ajustes**, crie respostas rápidas, campos personalizados, etiquetas e fluxos.
-5. Quer IA? Em **Ajustes → Assistente de IA**, ligue o assistente, escolha o provedor e cole a sua chave.
+4. Em **Ajustes**, crie respostas rápidas, modelos de mensagem, campos personalizados, etiquetas, o catálogo de produtos e os fluxos.
+5. Já tem uma lista de clientes? Em **Ajustes → Dados e backup → Importar leads (CSV)**. A prévia mostra o que vai entrar antes de gravar.
+6. Quer IA? Em **Ajustes → Assistente de IA**, ligue o assistente, escolha o provedor e cole a sua chave.
 
-Anexos, áudios e chamadas continuam no WhatsApp original: use o ícone do WhatsApp na barra lateral e volte pelo
+Fotos você envia pelo próprio CRM (botão de imagem, Ctrl+V ou arrastar para a conversa).
+
+Áudios, documentos e chamadas continuam no WhatsApp original: use o ícone do WhatsApp na barra lateral e volte pelo
 botão verde que aparece no canto.
 
 | Atalho | Ação |
@@ -192,8 +202,14 @@ de dados do contato, **Ler do perfil** vincula o número do telefone, o que deix
 **Quero usar o WhatsApp normal:** clique no ícone do WhatsApp na barra lateral ou aperte **Alt+K**. Para não abrir o CRM
 sozinho, desligue a opção em **Ajustes → Dados e backup**.
 
+**Os avisos de tarefa não aparecem:** eles precisam do WhatsApp Web aberto em alguma aba (pode ser em segundo plano) e
+das notificações do navegador liberadas no sistema. Confira também **Ajustes → Dados e backup → Abertura e avisos**.
+
+**A foto não foi enviada:** o CRM usa o editor de fotos do próprio WhatsApp. Se ele não abrir, o WhatsApp original aparece
+para você concluir o envio por lá, e a foto continua anexada no CRM.
+
 **Parou de funcionar depois de uma atualização do WhatsApp:** o WhatsApp muda o site com frequência. No painel, vá em
-**Dados → Copiar diagnóstico** (os números saem mascarados) e abra uma [issue](https://github.com/vileondev/minicrm/issues) com ele.
+**Ajustes → Dados e backup → Copiar diagnóstico** (os números saem mascarados) e abra uma [issue](https://github.com/vileondev/minicrm/issues) com ele.
 
 ---
 
@@ -211,10 +227,10 @@ Contribuições são muito bem-vindas: correções, novos recursos, traduções,
 | Caminho | O que tem |
 |---|---|
 | `src/utils/domSelectors.ts` | Todos os seletores do WhatsApp. **Comece por aqui quando o WhatsApp mudar.** |
-| `src/content/` | Entrada, observer, leitura de mensagens, lista de conversas, métricas, automações e IA |
+| `src/content/` | Entrada, observer, leitura de mensagens, lista de conversas, métricas, importação de CSV, avisos, automações e IA |
 | `src/components/` | App em tela cheia (Shadow DOM): caixa de entrada, funil, tarefas, relatório, ajustes e painel do contato |
-| `src/storage/` | IndexedDB (contatos) e `chrome.storage.local` (etapas, respostas, fluxos, configurações) |
-| `src/background.ts` | Service worker: única parte que fala com as APIs de IA |
+| `src/storage/` | IndexedDB (contatos) e `chrome.storage.local` (etapas, respostas, modelos, catálogo, fluxos, configurações) |
+| `src/background.ts` | Service worker: mostra os avisos de tarefa e é a única parte que fala com as APIs de IA |
 
 ---
 

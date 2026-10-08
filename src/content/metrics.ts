@@ -2,6 +2,7 @@ import type { Contact, Stage } from '../types';
 import { state } from './state';
 
 const DAY = 86400000;
+export const DAY_MS = DAY;
 
 export const sortedStages = (): Stage[] => state.stages.slice().sort((a, b) => a.order - b.order);
 
@@ -66,4 +67,40 @@ export function funnelStats(contacts: Contact[]): StageStats[] {
       weighted: mine.reduce((a, c) => a + weightedValue(c), 0),
     };
   });
+}
+
+export interface PeriodStats {
+  newLeads: number;
+  advanced: number; // leads que foram para uma etapa mais à frente
+  won: number; // leads que chegaram à última etapa
+  wonValue: number;
+  tasksDone: number;
+  timeToClose: number | null; // ms, da entrada no CRM até a última etapa
+}
+
+/** Números do painel para um intervalo [from, to). Usa o histórico de etapas e as datas de conclusão das tarefas. */
+export function periodStats(contacts: Contact[], from: number, to: number): PeriodStats {
+  const stages = sortedStages();
+  const order = new Map(stages.map((s, i) => [s.id, i]));
+  const lastId = stages[stages.length - 1]?.id;
+  const inRange = (t: number | undefined) => t !== undefined && t >= from && t < to;
+  let newLeads = 0, advanced = 0, won = 0, wonValue = 0, tasksDone = 0, closeSum = 0;
+  for (const c of contacts) {
+    if (inRange(c.createdAt)) newLeads++;
+    const hist = c.stageHistory ?? [];
+    let moved = false;
+    let wonAt: number | undefined;
+    hist.forEach((e, i) => {
+      if (!inRange(e.at) || i === 0) return;
+      const before = hist[i - 1]!.stageId;
+      const a = before ? order.get(before) ?? -1 : -1;
+      const b = e.stageId ? order.get(e.stageId) ?? -1 : -1;
+      if (b > a) moved = true;
+      if (e.stageId === lastId) wonAt = e.at;
+    });
+    if (moved) advanced++;
+    if (wonAt !== undefined) { won++; wonValue += c.value; closeSum += wonAt - c.createdAt; }
+    tasksDone += c.tasks.filter((t) => t.done && inRange(t.doneAt)).length;
+  }
+  return { newLeads, advanced, won, wonValue, tasksDone, timeToClose: won ? closeSum / won : null };
 }

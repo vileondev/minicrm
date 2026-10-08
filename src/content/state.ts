@@ -1,5 +1,5 @@
-import type { AiSettings, Automation, ChatContext, Contact, FieldDef, QuickReply, Stage, ViewPrefs } from '../types';
-import { DEFAULT_AI, DEFAULT_VIEW, getAiSettings, getAutomations, getFields, getQuickReplies, getStages, getTagColors, getViewPrefs } from '../storage/chromeStore';
+import type { AiSettings, Automation, ChatContext, Contact, FieldDef, Product, QuickReply, Stage, Template, ViewPrefs } from '../types';
+import { DEFAULT_AI, DEFAULT_VIEW, getAiSettings, getAutomations, getFields, getProducts, getQuickReplies, getStages, getTagColors, getTemplates, getViewPrefs } from '../storage/chromeStore';
 import { normalizeName, setTagHues } from '../utils/format';
 import { getAllContacts } from '../storage/db';
 import { onDataChange } from '../storage/bus';
@@ -14,6 +14,8 @@ export const state = {
   ai: DEFAULT_AI as AiSettings,
   view: DEFAULT_VIEW as ViewPrefs,
   fields: [] as FieldDef[],
+  products: [] as Product[],
+  templates: [] as Template[],
 };
 
 let rawChat: ChatContext | null = null; // como o observer leu, antes de aplicar números vinculados
@@ -36,8 +38,8 @@ export function setChat(ctx: ChatContext | null): void {
 
 export async function reloadState(): Promise<void> {
   let tagHues: Record<string, number>;
-  [state.contacts, state.stages, state.quickReplies, state.automations, state.ai, state.view, state.fields, tagHues] = await Promise.all([
-    getAllContacts(), getStages(), getQuickReplies(), getAutomations(), getAiSettings(), getViewPrefs(), getFields(), getTagColors(),
+  [state.contacts, state.stages, state.quickReplies, state.automations, state.ai, state.view, state.fields, tagHues, state.products, state.templates] = await Promise.all([
+    getAllContacts(), getStages(), getQuickReplies(), getAutomations(), getAiSettings(), getViewPrefs(), getFields(), getTagColors(), getProducts(), getTemplates(),
   ]);
   setTagHues(tagHues);
   state.chat = resolveChat(rawChat);

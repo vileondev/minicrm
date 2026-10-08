@@ -11,6 +11,8 @@ type Section = 'inbox' | FunnelMode | 'settings';
 
 export interface App {
   open(): void;
+  /** Abre o app numa seção; com `lead`, abre a conversa dele na caixa de entrada. */
+  show(section: 'inbox' | 'tasks', lead?: Contact): void;
   hide(): void;
   toggle(): void;
   isOpen(): boolean;
@@ -116,6 +118,11 @@ export function mountApp(root: ShadowRoot): App {
       document.documentElement.classList.remove('wacrm-app-open');
     },
     toggle() { if (visible) api.hide(); else api.open(); },
+    show(s, lead) {
+      api.open();
+      go(s);
+      if (lead && s === 'inbox') inbox.openLead(lead);
+    },
     isOpen: isVisible,
     refresh() {
       if (!visible) return;
