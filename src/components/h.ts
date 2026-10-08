@@ -18,7 +18,13 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
       }
     }
   }
-  for (const c of children) if (c !== null && c !== undefined && c !== false) el.append(typeof c === 'number' ? String(c) : c);
+  // estados vazios são flex em coluna: cada frase vira um item, senão textos vizinhos se colam ("etapa.Arraste")
+  const wrapText = /(^|\s)empty(\s|$)/.test(el.className);
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    const node = typeof c === 'number' ? String(c) : c;
+    el.append(wrapText && typeof node === 'string' ? h('span', {}, node) : node);
+  }
   return el;
 }
 

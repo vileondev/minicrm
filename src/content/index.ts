@@ -1,12 +1,12 @@
-import { mountKanban } from '../components/Kanban';
+import { mountApp } from '../components/App';
 import { mountPanel } from '../components/Sidebar';
 import { mountQuickReplyPopup, mountSuggestionToast } from '../components/QuickReplyPopup';
 import { h, toast } from '../components/h';
 import { icon } from '../components/icons';
-import { todayStr } from '../utils/format';
 import { scheduleAutoAnalysis } from './ai';
 import { checkStale, initAutomation, onDataChanged, onIncomingMessage } from './automation';
 import { refreshBadges } from './chatList';
+import { readConversations, trackStatus } from './conversations';
 import { loadFonts } from './fonts';
 import { mountShadowRoot } from './injector';
 import { startObserver } from './observer';
@@ -16,43 +16,57 @@ async function init() {
   await Promise.all([reloadState(), loadFonts()]);
   await onDataChanged(); // primeiro snapshot: não dispara fluxos para o que já existia
   const root = mountShadowRoot();
-  const kanban = mountKanban(root);
+  const app = mountApp(root);
   const panel = mountPanel(root);
   mountQuickReplyPopup(root);
   const suggest = mountSuggestionToast(root);
   initAutomation({ suggest, notify: (msg) => toast(root, msg) });
 
-  // dock: botões na lateral esquerda do WhatsApp
-  const badge = h('span', { class: 'badge hidden' });
-  const kbBtn = h('button', { title: 'Kanban (Alt+K)', 'aria-label': 'Abrir Kanban', on: { click: () => kanban.toggle() } }, icon('kanban', 20), badge);
-  root.append(h('div', { class: 'dock' }, kbBtn,
-    h('button', { title: 'Contato (Alt+P)', 'aria-label': 'Abrir painel do contato', on: { click: () => panel.toggle() } }, icon('panel', 20))));
-
-  const updateBadge = () => {
-    const late = state.contacts.reduce((a, c) => a + c.tasks.filter((t) => !t.done && t.due && t.due < todayStr()).length, 0);
-    badge.textContent = String(late);
-    badge.classList.toggle('hidden', late === 0);
-  };
+  // com o WhatsApp original à mostra: botão para voltar ao CRM e painel do contato
+  const dock = h('div', { class: 'dock' },
+    h('button', { class: 'dock-main', title: 'Voltar ao CRM (Alt+K)', 'aria-label': 'Voltar ao CRM', on: { click: () => app.open() } }, icon('chats', 20)),
+    h('button', { title: 'Contato (Alt+P)', 'aria-label': 'Abrir painel do contato', on: { click: () => panel.toggle() } }, icon('panel', 20)));
+  root.append(dock);
+  const syncDock = () => dock.classList.toggle('hidden', app.isOpen());
+  const open = () => { app.open(); syncDock(); };
 
   watchState(async () => {
     await onDataChanged(); // fluxos "entra na etapa" e "tag adicionada"
     refreshBadges();
-    updateBadge();
     panel.refresh();
-    kanban.refresh();
+    app.refresh();
     void checkStale();
   });
 
   document.addEventListener('keydown', (e) => {
     if (!e.altKey) return;
-    if (e.key.toLowerCase() === 'k') { e.preventDefault(); kanban.toggle(); }
+    if (e.key.toLowerCase() === 'k') { e.preventDefault(); app.toggle(); syncDock(); }
     if (e.key.toLowerCase() === 'p') { e.preventDefault(); panel.toggle(); }
   }, true);
+  document.addEventListener('wacrm-show-whatsapp', () => syncDock());
+  new MutationObserver(syncDock).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
-  updateBadge();
+  // abre o CRM assim que o WhatsApp terminar de carregar (sem login, a tela do QR code continua visível)
+  if (state.view.autoOpen) {
+    const started = Date.now();
+    const wait = window.setInterval(() => {
+      if (document.getElementById('pane-side')) { window.clearInterval(wait); open(); }
+      else if (Date.now() - started > 120000) window.clearInterval(wait);
+    }, 500);
+  }
+  syncDock();
+
+  let tracking = false;
   startObserver({
-    onChatChange: (ctx) => { setChat(ctx); panel.refresh(); kanban.refresh(); },
-    onTick: () => { refreshBadges(); kanban.refreshChat(); },
+    onChatChange: (ctx) => { setChat(ctx); panel.refresh(); app.tick(); },
+    onTick: () => {
+      refreshBadges();
+      app.tick();
+      if (!tracking) {
+        tracking = true;
+        void trackStatus(readConversations()).finally(() => { tracking = false; });
+      }
+    },
     onIncoming: (text, raw) => {
       const chat = state.chat?.name === raw.name ? state.chat : raw; // usa o número vinculado, se houver
       if (state.contacts.some((c) => c.phone === chat.key && c.internal)) return; // interno: sem fluxos nem IA
