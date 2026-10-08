@@ -116,6 +116,7 @@ export async function onDataChanged(): Promise<void> {
   primed = true;
 
   for (const { c, stageChanged, newTags } of events) {
+    if (c.internal) continue; // interno: fora dos fluxos
     if (stageChanged) {
       c.stageChangedAt = Date.now();
       await putContact(c, true);
@@ -136,7 +137,7 @@ export async function checkStale(): Promise<void> {
   let dirty = false;
   for (const a of flows) {
     const t = a.trigger as Extract<Trigger, { type: 'stale' }>;
-    for (const c of state.contacts.filter((x) => x.stageId === t.stageId)) {
+    for (const c of state.contacts.filter((x) => x.stageId === t.stageId && !x.internal)) {
       const since = c.stageChangedAt ?? c.createdAt;
       const key = `${a.id}|${c.phone}`;
       if (Date.now() - since < t.days * 86400000 || log[key] === since) continue;

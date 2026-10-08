@@ -6,7 +6,8 @@ import { replaceTokenWithText } from '../utils/domHelpers';
 import { h, toast } from './h';
 import { icon } from './icons';
 
-const DEFAULT_MODEL = { anthropic: 'claude-haiku-4-5-20251001', openai: 'gpt-4o-mini' } as const;
+const DEFAULT_MODEL = { anthropic: 'claude-haiku-4-5-20251001', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash' } as const;
+const KEY_HINT = { anthropic: 'sk-ant-…', openai: 'sk-…', gemini: 'AIza…' } as const;
 const HEAT_LABEL = { quente: 'Quente', morno: 'Morno', frio: 'Frio' } as const;
 
 let cfg: AiSettings | null = null; // rascunho das configurações (sobrevive às re-renderizações)
@@ -85,9 +86,10 @@ export function aiView(root: ShadowRoot, refresh: () => void): Node[] {
       field('ai-pv', 'Provedor'),
       h('select', { id: 'ai-pv', on: { change: (e) => { c.provider = (e.target as HTMLSelectElement).value as AiSettings['provider']; c.model = DEFAULT_MODEL[c.provider]; refresh(); } } },
         h('option', { value: 'anthropic', selected: c.provider === 'anthropic' }, 'Anthropic (Claude)'),
-        h('option', { value: 'openai', selected: c.provider === 'openai' }, 'OpenAI')),
+        h('option', { value: 'openai', selected: c.provider === 'openai' }, 'OpenAI'),
+        h('option', { value: 'gemini', selected: c.provider === 'gemini' }, 'Google (Gemini)')),
       field('ai-key', 'Chave de API (fica só neste navegador)'),
-      h('input', { id: 'ai-key', type: 'password', autocomplete: 'off', value: c.apiKey, placeholder: c.provider === 'anthropic' ? 'sk-ant-…' : 'sk-…', on: { input: (e) => { c.apiKey = (e.target as HTMLInputElement).value.trim(); } } }),
+      h('input', { id: 'ai-key', type: 'password', autocomplete: 'off', value: c.apiKey, placeholder: KEY_HINT[c.provider], on: { input: (e) => { c.apiKey = (e.target as HTMLInputElement).value.trim(); } } }),
       field('ai-md', 'Modelo'),
       h('input', { id: 'ai-md', value: c.model || DEFAULT_AI.model, on: { input: (e) => { c.model = (e.target as HTMLInputElement).value.trim(); } } }),
       field('ai-cx', 'Sobre o seu negócio, produtos e tom de voz'),

@@ -10,7 +10,7 @@ import { refreshBadges } from './chatList';
 import { loadFonts } from './fonts';
 import { mountShadowRoot } from './injector';
 import { startObserver } from './observer';
-import { reloadState, state, watchState } from './state';
+import { reloadState, setChat, state, watchState } from './state';
 
 async function init() {
   await Promise.all([reloadState(), loadFonts()]);
@@ -51,9 +51,11 @@ async function init() {
 
   updateBadge();
   startObserver({
-    onChatChange: (ctx) => { state.chat = ctx; panel.refresh(); kanban.refresh(); },
+    onChatChange: (ctx) => { setChat(ctx); panel.refresh(); kanban.refresh(); },
     onTick: () => { refreshBadges(); kanban.refreshChat(); },
-    onIncoming: (text, chat) => {
+    onIncoming: (text, raw) => {
+      const chat = state.chat?.name === raw.name ? state.chat : raw; // usa o número vinculado, se houver
+      if (state.contacts.some((c) => c.phone === chat.key && c.internal)) return; // interno: sem fluxos nem IA
       void onIncomingMessage(text, chat);
       // IA opcional: analisa sozinha só se o usuário ligou; o rascunho é apenas sugerido
       scheduleAutoAnalysis(chat, (r) => {

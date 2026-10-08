@@ -11,9 +11,43 @@ interface AiRequest {
 
 interface Settings {
   enabled: boolean;
-  provider: 'anthropic' | 'openai';
+  provider: 'anthropic' | 'openai' | 'gemini';
   apiKey: string;
   model: string;
+}
+
+type Data = Record<string, any>;
+
+function request(s: Settings, req: AiRequest, signal: AbortSignal): Promise<Response> {
+  const maxTokens = req.maxTokens ?? 900;
+  const post = (url: string, headers: Record<string, string>, body: unknown) =>
+    fetch(url, { method: 'POST', signal, headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+
+  switch (s.provider) {
+    case 'anthropic':
+      return post('https://api.anthropic.com/v1/messages', { 'x-api-key': s.apiKey, 'anthropic-version': '2023-06-01' },
+        { model: s.model, max_tokens: maxTokens, system: req.system, messages: [{ role: 'user', content: req.user }] });
+    case 'openai':
+      // max_completion_tokens: os modelos novos (gpt-5, o-series) recusam o antigo max_tokens
+      return post('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${s.apiKey}` },
+        { model: s.model, max_completion_tokens: maxTokens, messages: [{ role: 'system', content: req.system }, { role: 'user', content: req.user }] });
+    case 'gemini':
+      // os modelos 2.5+ "pensam" antes de responder e esse raciocínio consome o limite de saída: folga de 2048 tokens
+      return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model)}:generateContent`, { 'x-goog-api-key': s.apiKey }, {
+        systemInstruction: { parts: [{ text: req.system }] },
+        contents: [{ role: 'user', parts: [{ text: req.user }] }],
+        generationConfig: { maxOutputTokens: maxTokens + 2048 },
+      });
+  }
+}
+
+function extractText(provider: Settings['provider'], data: Data): unknown {
+  switch (provider) {
+    case 'anthropic': return data.content?.[0]?.text;
+    case 'openai': return data.choices?.[0]?.message?.content;
+    case 'gemini': return (data.candidates?.[0]?.content?.parts as { text?: string; thought?: boolean }[] | undefined)
+      ?.filter((p) => !p.thought).map((p) => p.text ?? '').join('');
+  }
 }
 
 async function callAi(req: AiRequest): Promise<string> {
@@ -23,26 +57,14 @@ async function callAi(req: AiRequest): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
-    const maxTokens = req.maxTokens ?? 900;
-    const res =
-      s.provider === 'anthropic'
-        ? await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            signal: ctrl.signal,
-            headers: { 'content-type': 'application/json', 'x-api-key': s.apiKey, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({ model: s.model, max_tokens: maxTokens, system: req.system, messages: [{ role: 'user', content: req.user }] }),
-          })
-        : await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            signal: ctrl.signal,
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${s.apiKey}` },
-            body: JSON.stringify({ model: s.model, max_tokens: maxTokens, messages: [{ role: 'system', content: req.system }, { role: 'user', content: req.user }] }),
-          });
-
-    const data = (await res.json().catch(() => ({}))) as Record<string, any>;
+    const res = await request(s, req, ctrl.signal);
+    const data = (await res.json().catch(() => ({}))) as Data;
     if (!res.ok) throw new Error(data?.error?.message ?? `Erro HTTP ${res.status}`);
-    const text = s.provider === 'anthropic' ? data.content?.[0]?.text : data.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) throw new Error('A IA respondeu vazio.');
+    const text = extractText(s.provider, data);
+    if (typeof text !== 'string' || !text.trim()) {
+      const blocked = data.promptFeedback?.blockReason ?? data.candidates?.[0]?.finishReason;
+      throw new Error(blocked && blocked !== 'STOP' ? `A IA não respondeu (${blocked}).` : 'A IA respondeu vazio.');
+    }
     return text;
   } finally {
     clearTimeout(timer);
