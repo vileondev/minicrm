@@ -8,10 +8,10 @@ import { funnelStats, inFunnel, isGroupContact, stageProbability, weightedValue 
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
-import { addDays, applyVars, avatarColor, fullDate, initials, looseName, money, normalizeName, relDay, relTime, tagHue, todayStr } from '../utils/format';
+import { addDays, applyVars, avatarColor, fullDate, hashHue, initials, looseName, money, normalizeName, relDay, relTime, tagHue, todayStr } from '../utils/format';
 import { isAwaiting, setStatus } from '../content/conversations';
 import { fieldVars } from './ContactPanel';
-import { h, toast, uid } from './h';
+import { fieldError, h, toast, uid } from './h';
 import { icon } from './icons';
 
 export type FunnelMode = 'board' | 'tasks' | 'report';
@@ -102,7 +102,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
     if (msgs.length) {
-      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (m.media && m.text === `[${m.media}]` ? ' media' : '') }, group && !m.out && m.author ? h('div', { class: 'author' }, m.author) : null, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, h('span', { class: 'time' }, m.time))));
+      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (m.media && m.text === `[${m.media}]` ? ' media' : '') }, group && !m.out && m.author ? h('div', { class: 'author', style: `--h:${hashHue(m.author)}` }, m.author) : null, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, h('span', { class: 'time' }, m.time))));
     } else if (chatError) {
       const openNow = state.chat && !sameChat(c) ? state.chat : null;
       box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), h('span', {}, chatError,
@@ -341,17 +341,25 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
       h('option', { value: '' }, 'Escolha o lead'),
       ...leads.map((c) => h('option', { value: c.phone, selected: isCurrent(c) }, c.name || c.phone)));
     const due = h('input', { type: 'date', 'aria-label': 'Prazo', value: todayStr() });
+    const err = fieldError();
     const add = async () => {
       const c = state.contacts.find((x) => x.phone === lead.value);
       const t = text.value.trim();
-      if (!t) return text.focus();
-      if (!c) return toast(root, 'Escolha o lead da tarefa.');
+      if (!t) return err.show(text, 'Escreva o que precisa ser feito.');
+      if (!c) return err.show(lead, 'Escolha para qual lead é a tarefa.');
+      if (due.value && due.value < todayStr()) return err.show(due, 'Esse prazo já passou. Escolha hoje ou uma data futura.');
       c.tasks = [...c.tasks, { id: uid(), text: t, done: false, createdAt: Date.now(), due: due.value || undefined }];
+      text.value = '';
       await putContact(c);
-      toast(root, `Tarefa criada para ${c.name}.`);
+      toast(root, `Tarefa criada para ${c.name}${due.value ? `, prazo ${relDay(due.value)}` : ''}.`);
     };
     text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void add(); });
-    return h('div', { class: 'tform' }, text, lead, due, h('button', { class: 'btn', on: { click: () => void add() } }, icon('plus'), 'Adicionar'));
+    text.addEventListener('input', () => err.clear(text));
+    lead.addEventListener('change', () => err.clear(lead));
+    due.addEventListener('change', () => err.clear(due));
+    return h('div', { class: 'tform-wrap' },
+      h('div', { class: 'tform' }, text, lead, due, h('button', { class: 'btn', on: { click: () => void add() } }, icon('plus'), 'Adicionar')),
+      err.el);
   }
 
   function tasksView(): HTMLElement {
