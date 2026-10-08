@@ -6,8 +6,9 @@ import { openChatByName, visibleChatNames } from '../content/chatList';
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
-import { applyVars, avatarColor, initials, money, normalizeName, tagColor, todayStr } from '../utils/format';
+import { applyVars, avatarColor, initials, money, normalizeName, tagHue, todayStr } from '../utils/format';
 import { h, toast, uid } from './h';
+import { icon } from './icons';
 
 export interface Kanban {
   toggle(): void;
@@ -19,8 +20,11 @@ export interface Kanban {
 const lateTasks = (c: Contact) => c.tasks.filter((t) => !t.done && t.due && t.due < todayStr()).length;
 const openTasks = (c: Contact) => c.tasks.filter((t) => !t.done).length;
 
+const iconBtn = (name: Parameters<typeof icon>[0], title: string, onClick: (e: Event) => void, cls = 'x') =>
+  h('button', { class: cls, title, 'aria-label': title, on: { click: onClick } }, icon(name));
+
 export function mountKanban(root: ShadowRoot): Kanban {
-  const overlay = h('div', { class: 'kb hidden' });
+  const overlay = h('div', { class: 'kb hidden', role: 'dialog', 'aria-label': 'Funil de vendas' });
   root.append(overlay);
   let query = '';
   let tagFilter = '';
@@ -33,14 +37,14 @@ export function mountKanban(root: ShadowRoot): Kanban {
   const drafts = new Map<string, string>(); // rascunhos por contato
 
   const isOpen = () => !overlay.classList.contains('hidden');
+  const sameChat = (c: Contact) => !!state.chat && normalizeName(state.chat.name) === normalizeName(c.name);
 
   function visible(list: Contact[]): Contact[] {
     const q = normalizeName(query);
     return list.filter((c) => {
       if (tagFilter && !c.tags.includes(tagFilter)) return false;
       if (!q) return true;
-      const hay = normalizeName([c.name, c.phone, ...c.tags, ...c.notes.map((n) => n.text)].join(' '));
-      return hay.includes(q);
+      return normalizeName([c.name, c.phone, ...c.tags, ...c.notes.map((n) => n.text)].join(' ')).includes(q);
     });
   }
 
@@ -101,20 +105,26 @@ export function mountKanban(root: ShadowRoot): Kanban {
     render();
   }
 
-  const sameChat = (c: Contact) => !!state.chat && normalizeName(state.chat.name) === normalizeName(c.name);
+  /* ---------- chat dentro do card ---------- */
 
   function fillMsgs(box: HTMLElement, c: Contact) {
     const msgs = sameChat(c) ? readMessages(c.name) : [];
-    const sig = JSON.stringify(msgs);
+    const sig = JSON.stringify([msgs, chatError, sameChat(c)]);
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
-    box.replaceChildren(...(msgs.length
-      ? msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') }, m.text, h('span', { class: 'time' }, m.time)))
-      : [h('div', { class: 'empty' }, chatError ?? (sameChat(c) ? 'Sem mensagens de texto visíveis (mídia não aparece aqui).' : 'Abrindo conversa…'))]));
+    if (msgs.length) {
+      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') }, m.text, h('span', { class: 'time' }, m.time))));
+    } else if (chatError) {
+      box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), chatError));
+    } else if (sameChat(c)) {
+      box.replaceChildren(h('div', { class: 'state' }, 'Nenhuma mensagem de texto visível. Fotos e áudios não aparecem aqui.'));
+    } else {
+      box.replaceChildren(h('div', { class: 'skel' }), h('div', { class: 'skel' }), h('div', { class: 'skel' })); // carregando
+    }
     box.scrollTop = box.scrollHeight;
   }
 
-  /** Atualiza só as mensagens do card aberto (chamado a cada varredura do observer; não recria o quadro). */
+  /** Atualiza só as mensagens do card aberto (a cada varredura do observer; não recria o quadro). */
   function refreshChat() {
     const c = chatFor && state.contacts.find((x) => x.phone === chatFor);
     const box = overlay.querySelector<HTMLElement>('.cardchat .msgs');
@@ -130,8 +140,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
       const ok = (await openChatByName(c.name)) && (await waitForChat(c.name));
       if (!ok) chatError = 'Não consegui abrir esta conversa. Ela precisa aparecer na lista do WhatsApp (role a lista ou pesquise).';
     }
-    const box = overlay.querySelector<HTMLElement>('.cardchat .msgs');
-    if (box) { box.dataset.sig = ''; fillMsgs(box, c); }
+    refreshChat();
   }
 
   async function sendFromCard(c: Contact, ta: HTMLTextAreaElement) {
@@ -148,7 +157,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
 
   function chatBox(c: Contact): HTMLElement {
     const msgs = h('div', { class: 'msgs' });
-    const ta = h('textarea', { rows: 2, placeholder: 'Mensagem… (Enter envia, Shift+Enter quebra linha)' });
+    const ta = h('textarea', { rows: 2, 'aria-label': 'Mensagem para ' + c.name, placeholder: 'Escreva uma mensagem. Enter envia, Shift+Enter quebra a linha.' });
     ta.value = drafts.get(c.phone) ?? '';
     ta.addEventListener('input', () => drafts.set(c.phone, ta.value));
     ta.addEventListener('keydown', (e) => {
@@ -156,13 +165,21 @@ export function mountKanban(root: ShadowRoot): Kanban {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendFromCard(c, ta); }
     });
     const chips = h('div', { class: 'qchips' }, ...state.quickReplies.slice(0, 6).map((r) =>
-      h('button', { class: 'pill', title: r.text, on: { click: () => { ta.value = (ta.value ? ta.value + ' ' : '') + applyVars(r.text, { key: c.phone, number: null, name: c.name, isGroup: false, byName: false }); drafts.set(c.phone, ta.value); ta.focus(); } } }, '/' + r.shortcut)));
+      h('button', { class: 'pill', title: r.text, on: { click: () => {
+        const text = applyVars(r.text, { key: c.phone, number: null, name: c.name, isGroup: false, byName: false });
+        ta.value = ta.value ? ta.value + ' ' + text : text;
+        drafts.set(c.phone, ta.value);
+        ta.focus();
+      } } }, '/' + r.shortcut)));
     const box = h('div', { class: 'cardchat', on: { click: (e) => e.stopPropagation() } }, msgs, chips, ta,
-      h('div', { class: 'inline' }, h('button', { class: 'btn', on: { click: () => void sendFromCard(c, ta) } }, 'Enviar'),
-        h('button', { class: 'btn ghost', title: 'Abre o WhatsApp completo ao lado', on: { click: () => void open(c) } }, '↗ WhatsApp')));
+      h('div', { class: 'inline' },
+        h('button', { class: 'btn', on: { click: () => void sendFromCard(c, ta) } }, icon('send'), 'Enviar'),
+        h('button', { class: 'btn ghost', title: 'Abre o WhatsApp completo ao lado', on: { click: () => void open(c) } }, icon('open-out'), 'WhatsApp')));
     queueMicrotask(() => fillMsgs(msgs, c));
     return box;
   }
+
+  /* ---------- quadro ---------- */
 
   function card(c: Contact): HTMLElement {
     const late = lateTasks(c);
@@ -176,22 +193,22 @@ export function mountKanban(root: ShadowRoot): Kanban {
       h('div', { class: 'card-top' },
         h('div', { class: 'avatar', style: `background:${avatarColor(c.name)}` }, initials(c.name)),
         h('b', {}, c.name || c.phone),
-        h('button', { class: 'x', title: 'Conversar', on: { click: (e) => { e.stopPropagation(); void toggleChat(c); } } }, '💬'),
-        h('button', { class: 'x', title: 'Excluir lead', on: { click: (e) => { e.stopPropagation(); if (confirm(`Excluir "${c.name}" do CRM?`)) void deleteContact(c.phone); } } }, '✕')),
+        iconBtn('chat', expanded ? 'Fechar conversa' : 'Conversar', (e) => { e.stopPropagation(); void toggleChat(c); }),
+        iconBtn('trash', 'Excluir lead', (e) => { e.stopPropagation(); if (confirm(`Excluir "${c.name}" do CRM?`)) void deleteContact(c.phone); }, 'x danger')),
       expanded ? chatBox(c) : null,
-      c.tags.length ? h('div', { class: 'chips' }, ...c.tags.map((t) => h('span', { class: 'chip', style: `background:${tagColor(t)}` }, t))) : null,
+      c.tags.length ? h('div', { class: 'chips' }, ...c.tags.map((t) => h('span', { class: 'chip', style: `--h:${tagHue(t)}` }, t))) : null,
       c.notes[0] ? h('div', { class: 'snippet' }, c.notes[0].text) : null,
       h('div', { class: 'meta' },
-        c.value ? h('span', {}, money(c.value)) : null,
-        openTasks(c) ? h('span', { class: late ? 'late' : '' }, `✔ ${openTasks(c)}${late ? ` (${late} atrasada${late > 1 ? 's' : ''})` : ''}`) : null,
-        h('span', {}, new Date(c.updatedAt).toLocaleDateString('pt-BR'))));
+        c.value ? h('span', {}, icon('coins', 14), money(c.value)) : null,
+        openTasks(c) ? h('span', { class: late ? 'late' : '' }, icon(late ? 'warning' : 'check', 14), late ? `${late} atrasada${late > 1 ? 's' : ''}` : `${openTasks(c)} tarefa${openTasks(c) > 1 ? 's' : ''}`) : null,
+        h('span', {}, icon('calendar', 14), new Date(c.updatedAt).toLocaleDateString('pt-BR'))));
     return el;
   }
 
-  function column(stage: Stage | null, list: Contact[], index: number, total: number): HTMLElement {
+  function column(stage: Stage | null, list: Contact[]): HTMLElement {
     const mine = list.filter((c) => (c.stageId ?? null) === (stage?.id ?? null));
     const sum = mine.reduce((a, c) => a + c.value, 0);
-    const col = h('div', { class: 'col', style: `--c:${stage?.color ?? '#8696a0'}`,
+    const col = h('div', { class: 'col',
       on: {
         dragover: (e) => { e.preventDefault(); col.classList.add('over'); },
         dragleave: () => col.classList.remove('over'),
@@ -199,24 +216,30 @@ export function mountKanban(root: ShadowRoot): Kanban {
       } });
 
     col.append(h('div', { class: 'col-head' },
-      h('div', { class: 'grow' }, h('b', {}, stage?.name ?? 'Sem etapa'), h('span', { class: 'muted' }, `${mine.length} lead${mine.length === 1 ? '' : 's'}${sum ? ' · ' + money(sum) : ''}`)),
-      stage ? h('button', { class: 'x', title: 'Mover para a esquerda', on: { click: () => void reorder(stage, -1) } }, '‹') : null,
-      stage ? h('button', { class: 'x', title: 'Mover para a direita', on: { click: () => void reorder(stage, 1) } }, '›') : null,
-      stage ? h('button', { class: 'x', title: 'Editar etapa', on: { click: () => { editing = editing === stage.id ? null : stage.id; render(); } } }, '⚙') : null));
+      h('div', { class: 'grow' },
+        h('div', { class: 'name' }, h('span', { class: 'dot', style: `background:${stage?.color ?? 'var(--muted)'}` }), stage?.name ?? 'Sem etapa', h('span', { class: 'count' }, mine.length)),
+        sum ? h('span', { class: 'sum' }, money(sum)) : null),
+      stage ? iconBtn('caret-left', 'Mover etapa para a esquerda', () => void reorder(stage, -1)) : null,
+      stage ? iconBtn('caret-right', 'Mover etapa para a direita', () => void reorder(stage, 1)) : null,
+      stage ? iconBtn('gear', 'Editar etapa', () => { editing = editing === stage.id ? null : stage.id; render(); }) : null));
 
     if (stage && editing === stage.id) {
-      const name = h('input', { value: stage.name });
-      const color = h('input', { type: 'color', value: stage.color, style: 'padding:2px;height:32px' });
+      const name = h('input', { id: 'stage-name-' + stage.id, value: stage.name });
+      const color = h('input', { id: 'stage-color-' + stage.id, type: 'color', value: stage.color });
       const save = () => void saveStages(state.stages.map((s) => (s.id === stage.id ? { ...s, name: name.value.trim() || s.name, color: color.value } : s)));
       name.addEventListener('change', save);
       color.addEventListener('change', save);
-      col.append(h('div', { class: 'col-edit' }, name, h('div', { class: 'inline' }, color, h('button', { class: 'btn ghost', on: { click: () => void removeStage(stage) } }, 'Excluir etapa'))));
+      col.append(h('div', { class: 'col-edit' },
+        h('label', { class: 'field', for: name.id }, 'Nome da etapa'), name,
+        h('label', { class: 'field', for: color.id }, 'Cor'), color,
+        h('button', { class: 'btn ghost sm', on: { click: () => void removeStage(stage) } }, icon('trash', 14), 'Excluir etapa')));
     }
 
     const body = h('div', { class: 'col-body' }, ...mine.sort((a, b) => b.updatedAt - a.updatedAt).map(card));
-    if (!mine.length) body.append(h('div', { class: 'empty' }, 'Arraste leads para cá'));
+    if (!mine.length) {
+      body.append(h('div', { class: 'empty' }, icon('arrows-in'), stage ? 'Nenhum lead nesta etapa.' : 'Nenhum lead sem etapa.', stage ? 'Arraste um card para cá.' : null));
+    }
     col.append(body);
-    void index; void total;
     return col;
   }
 
@@ -226,8 +249,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
     const rows = [['Nome', 'Chave/Telefone', 'Etapa', 'Tags', 'Valor', 'Tarefas abertas', 'Última nota'].map(esc).join(';')];
     for (const c of state.contacts) rows.push([c.name, c.phone, stages.get(c.stageId ?? '') ?? '', c.tags.join(', '), c.value, openTasks(c), c.notes[0]?.text ?? ''].map(esc).join(';'));
     const url = URL.createObjectURL(new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
-    const a = h('a', { href: url, download: 'leads.csv' });
-    a.click();
+    h('a', { href: url, download: 'leads.csv' }).click();
     URL.revokeObjectURL(url);
   }
 
@@ -249,26 +271,26 @@ export function mountKanban(root: ShadowRoot): Kanban {
     const allTags = [...new Set(state.contacts.flatMap((c) => c.tags))].sort();
     const total = state.contacts.reduce((a, c) => a + c.value, 0);
     const late = state.contacts.reduce((a, c) => a + lateTasks(c), 0);
+    const stages = state.stages.slice().sort((a, b) => a.order - b.order);
 
-    const search = h('input', { placeholder: 'Buscar lead, tag ou nota…', value: query, on: { input: (e) => { query = (e.target as HTMLInputElement).value; renderBoardOnly(); } } });
-    const tagSel = h('select', { on: { change: (e) => { tagFilter = (e.target as HTMLSelectElement).value; render(); } } },
+    const search = h('input', { type: 'search', 'aria-label': 'Buscar lead, tag ou nota', placeholder: 'Buscar lead, tag ou nota', value: query,
+      on: { input: (e) => { query = (e.target as HTMLInputElement).value; renderBoardOnly(); } } });
+    const tagSel = h('select', { 'aria-label': 'Filtrar por tag', on: { change: (e) => { tagFilter = (e.target as HTMLSelectElement).value; render(); } } },
       h('option', { value: '' }, 'Todas as tags'), ...allTags.map((t) => h('option', { value: t, selected: t === tagFilter }, t)));
 
-    const board = h('div', { class: 'kb-board' });
-    const stages = state.stages.slice().sort((a, b) => a.order - b.order);
-    board.append(column(null, list, 0, stages.length), ...stages.map((s, i) => column(s, list, i, stages.length)),
-      h('button', { class: 'btn ghost', style: 'flex:none', on: { click: () => {
-        const name = prompt('Nome da nova etapa:')?.trim();
-        if (name) void saveStages([...state.stages, { id: uid(), name, color: '#8b5cf6', order: state.stages.length }]);
-      } } }, '+ Etapa'));
+    const addStage = h('button', { class: 'btn ghost', style: 'flex:none', on: { click: () => {
+      const name = prompt('Nome da nova etapa:')?.trim();
+      if (name) void saveStages([...state.stages, { id: uid(), name, color: '#8b5cf6', order: state.stages.length }]);
+    } } }, icon('plus'), 'Etapa');
+
+    const board = h('div', { class: 'kb-board' }, column(null, list), ...stages.map((s) => column(s, list)), addStage);
 
     function renderBoardOnly() {
       const prev = overlay.querySelector('.kb-board');
       if (!prev) return;
       const scroll = prev.scrollLeft;
       const l2 = visible(state.contacts);
-      const next = h('div', { class: 'kb-board' });
-      next.append(column(null, l2, 0, stages.length), ...stages.map((s, i) => column(s, l2, i, stages.length)));
+      const next = h('div', { class: 'kb-board' }, column(null, l2), ...stages.map((s) => column(s, l2)), addStage);
       prev.replaceWith(next);
       next.scrollLeft = scroll;
     }
@@ -276,15 +298,19 @@ export function mountKanban(root: ShadowRoot): Kanban {
     overlay.replaceChildren(
       h('div', { class: 'kb-top' },
         h('h2', {}, 'Funil de vendas'),
-        h('span', { class: 'kb-stats' }, `${state.contacts.length} leads · ${money(total)}${late ? ` · ⚠ ${late} tarefa(s) atrasada(s)` : ''}`),
+        h('div', { class: 'kb-metrics' },
+          h('div', { class: 'metric' }, h('span', {}, 'Leads'), h('b', {}, state.contacts.length)),
+          h('div', { class: 'metric' }, h('span', {}, 'Valor em aberto'), h('b', {}, money(total))),
+          h('div', { class: 'metric' + (late ? ' alert' : '') }, h('span', {}, 'Tarefas atrasadas'), h('b', {}, late))),
         h('span', { class: 'kb-spacer' }),
-        search, tagSel,
-        h('button', { class: 'btn ghost', title: 'Adiciona o chat aberto ao funil', on: { click: async () => { if (state.chat) { await getOrCreateContact(state.chat); toast(root, 'Chat adicionado.'); } else toast(root, 'Abra uma conversa primeiro.'); } } }, '+ Chat atual'),
-        h('button', { class: 'btn ghost', title: 'Cria leads com as conversas visíveis na lista', on: { click: () => void importVisible() } }, 'Importar conversas'),
-        h('button', { class: 'btn ghost', on: { click: exportCsv } }, 'CSV'),
-        split ? h('button', { class: 'btn ghost', title: 'Alterna a largura do chat', on: { click: () => { ratio = ratio >= 0.7 ? 0.45 : ratio + 0.125; setSplit(true); render(); } } }, '↔ Chat') : null,
-        split ? h('button', { class: 'btn ghost', on: { click: () => { setSplit(false); render(); } } }, '⤢ Tela cheia') : null,
-        h('button', { class: 'btn', on: { click: () => api.close() } }, 'Fechar (Esc)')),
+        h('div', { class: 'search' }, icon('search'), search),
+        tagSel,
+        h('button', { class: 'btn ghost', title: 'Adiciona o chat aberto ao funil', on: { click: async () => { if (state.chat) { await getOrCreateContact(state.chat); toast(root, 'Chat adicionado ao funil.'); } else toast(root, 'Abra uma conversa primeiro.'); } } }, icon('plus'), 'Chat atual'),
+        h('button', { class: 'btn ghost', title: 'Cria leads com as conversas visíveis na lista', on: { click: () => void importVisible() } }, icon('users'), 'Importar'),
+        h('button', { class: 'btn ghost', on: { click: exportCsv } }, icon('download'), 'CSV'),
+        split ? h('button', { class: 'btn ghost', title: 'Alterna a largura do chat', on: { click: () => { ratio = ratio >= 0.7 ? 0.45 : ratio + 0.125; setSplit(true); render(); } } }, icon('arrows-lr'), 'Largura') : null,
+        split ? h('button', { class: 'btn ghost', on: { click: () => { setSplit(false); render(); } } }, icon('fullscreen'), 'Tela cheia') : null,
+        h('button', { class: 'btn', title: 'Esc', on: { click: () => api.close() } }, icon('x'), 'Fechar')),
       board);
     if (!root.activeElement) search.focus(); // não rouba o foco de outro campo (ex.: edição de etapa)
   }

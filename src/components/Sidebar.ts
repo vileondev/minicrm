@@ -5,7 +5,8 @@ import { exportBackup, importBackup } from '../storage/backup';
 import { collectDiagnostics } from '../content/diagnostics';
 import { state } from '../content/state';
 import { replaceTokenWithText } from '../utils/domHelpers';
-import { applyVars, avatarColor, initials, tagColor, todayStr } from '../utils/format';
+import { applyVars, avatarColor, initials, tagHue, todayStr } from '../utils/format';
+import { icon } from './icons';
 import { h, toast, uid } from './h';
 
 type Tab = 'contact' | 'replies' | 'data';
@@ -33,7 +34,7 @@ export function mountPanel(root: ShadowRoot): Panel {
       h('div', { class: 'grow' },
         h('b', {}, chat?.name || 'Nenhuma conversa'),
         h('span', { class: 'muted' }, !chat ? 'Abra uma conversa' : chat.isGroup ? 'Grupo' : chat.number ? '+' + chat.number : chat.byName ? 'Identificado pelo nome' : 'Número oculto pelo WhatsApp')),
-      h('button', { class: 'x', title: 'Fechar', on: { click: () => api.toggle() } }, '✕'));
+      h('button', { class: 'x', title: 'Fechar', on: { click: () => api.toggle() } }, icon('x', 12)));
     tabsEl.replaceChildren(
       ...([['contact', 'Contato'], ['replies', 'Respostas'], ['data', 'Dados']] as const).map(([id, label]) =>
         h('button', { class: 'tab' + (tab === id ? ' active' : ''), on: { click: () => { tab = id; refresh(); } } }, label)));
@@ -68,11 +69,11 @@ export function mountPanel(root: ShadowRoot): Panel {
     };
 
     const stageBtns = h('div', { class: 'stages' },
-      h('button', { class: 'pill' + (!contact.stageId ? ' on' : ''), style: !contact.stageId ? 'background:#8696a0' : '', on: { click: () => { contact.stageId = null; void save(); } } }, 'Sem etapa'),
-      ...state.stages.map((s) => h('button', { class: 'pill' + (contact.stageId === s.id ? ' on' : ''), style: contact.stageId === s.id ? `background:${s.color}` : '', on: { click: () => { contact.stageId = s.id; void save(); } } },
+      h('button', { class: 'pill' + (!contact.stageId ? ' on' : ''), 'aria-pressed': String(!contact.stageId), on: { click: () => { contact.stageId = null; void save(); } } }, 'Sem etapa'),
+      ...state.stages.map((s) => h('button', { class: 'pill' + (contact.stageId === s.id ? ' on' : ''), 'aria-pressed': String(contact.stageId === s.id), on: { click: () => { contact.stageId = s.id; void save(); } } },
         h('span', { class: 'dot', style: `background:${s.color}` }), s.name)));
 
-    const value = h('input', { type: 'number', min: '0', step: '10', placeholder: '0', value: contact.value ? String(contact.value) : '', on: { change: (e) => { contact.value = Math.max(0, Number((e.target as HTMLInputElement).value) || 0); void save(); } } });
+    const value = h('input', { type: 'number', min: '0', step: '10', placeholder: '0', 'aria-label': 'Valor do negócio em reais', value: contact.value ? String(contact.value) : '', on: { change: (e) => { contact.value = Math.max(0, Number((e.target as HTMLInputElement).value) || 0); void save(); } } });
 
     const knownTags = [...new Set(state.contacts.flatMap((c) => c.tags))].filter((t) => !contact.tags.includes(t));
     const tagIn = h('input', { placeholder: 'Nova tag + Enter', list: 'wacrm-tags' });
@@ -95,13 +96,13 @@ export function mountPanel(root: ShadowRoot): Panel {
       h('div', { class: 'sec' }, h('h4', {}, 'Etapa do funil'), stageBtns),
       h('div', { class: 'sec' }, h('h4', {}, 'Valor do negócio (R$)'), value),
       h('div', { class: 'sec' }, h('h4', {}, 'Tags'),
-        ...contact.tags.map((t) => h('span', { class: 'chip', style: `background:${tagColor(t)}` }, t, h('button', { class: 'x', on: { click: () => { contact.tags = contact.tags.filter((x) => x !== t); void save(); } } }, '✕'))),
+        ...contact.tags.map((t) => h('span', { class: 'chip', style: `--h:${tagHue(t)}` }, t, h('button', { class: 'x', on: { click: () => { contact.tags = contact.tags.filter((x) => x !== t); void save(); } } }, icon('x', 12)))),
         tagIn, datalist),
       h('div', { class: 'sec' }, h('h4', {}, 'Tarefas'),
         ...contact.tasks.map((t) => h('div', { class: 'row' + (t.done ? ' done' : '') + (!t.done && t.due && t.due < todayStr() ? ' late' : '') },
           h('label', {}, h('input', { type: 'checkbox', checked: t.done, on: { change: () => { t.done = !t.done; void save(); } } }), h('span', { class: 't' }, t.text)),
           h('span', { class: 'due muted' }, t.due ? new Date(t.due + 'T00:00').toLocaleDateString('pt-BR') : ''),
-          h('button', { class: 'x', on: { click: () => { contact.tasks = contact.tasks.filter((x) => x.id !== t.id); void save(); } } }, '✕'))),
+          h('button', { class: 'x', on: { click: () => { contact.tasks = contact.tasks.filter((x) => x.id !== t.id); void save(); } } }, icon('x', 12)))),
         h('div', { style: 'margin-top:8px' }, taskIn, h('div', { class: 'inline' }, dueIn, h('button', { class: 'btn', style: 'white-space:nowrap', on: { click: addTask } }, 'Adicionar')))),
       h('div', { class: 'sec' }, h('h4', {}, 'Notas'), noteIn,
         h('button', { class: 'btn', on: { click: () => { const v = noteIn.value.trim(); if (v) { contact.notes = [{ id: uid(), text: v, createdAt: Date.now() }, ...contact.notes]; void save(); } } } }, 'Adicionar nota'),
@@ -113,29 +114,32 @@ export function mountPanel(root: ShadowRoot): Panel {
 
   async function repliesView(): Promise<Node[]> {
     const [replies, rules] = await Promise.all([getQuickReplies(), getRules()]);
-    const sc = h('input', { placeholder: 'Atalho (ex.: preco → digite /preco)' });
-    const ti = h('input', { placeholder: 'Título' });
-    const tx = h('textarea', { placeholder: 'Texto. Variáveis: {nome} {primeiro_nome} {saudacao} {data}' });
-    const kw = h('input', { placeholder: 'Palavra-chave na mensagem recebida' });
-    const qrSel = h('select', {}, ...replies.map((r: QuickReply) => h('option', { value: r.id }, r.title)));
+    const sc = h('input', { id: 'qr-sc', placeholder: 'preco' });
+    const ti = h('input', { id: 'qr-ti', placeholder: 'Preços' });
+    const tx = h('textarea', { id: 'qr-tx', placeholder: 'Olá {primeiro_nome}, segue a tabela de valores.' });
+    const kw = h('input', { id: 'rl-kw', placeholder: 'preço' });
+    const qrSel = h('select', { id: 'rl-qr' }, ...replies.map((r: QuickReply) => h('option', { value: r.id }, r.title)));
+    const lab = (id: string, text: string) => h('label', { class: 'field', for: id }, text);
 
     return [
       h('div', { class: 'sec' }, h('h4', {}, 'Clique para inserir no chat'),
         ...replies.map((r) => h('div', { class: 'qr', on: { click: () => void replaceTokenWithText(0, applyVars(r.text, state.chat)) } },
-          h('div', { class: 'row', style: 'border:0;padding:0' }, h('b', {}, '/' + r.shortcut + ' · ' + r.title),
-            h('button', { class: 'x', on: { click: (e) => { e.stopPropagation(); void saveQuickReplies(replies.filter((x) => x.id !== r.id)).then(refresh); } } }, '✕')),
+          h('div', { class: 'row', style: 'border:0;padding:0' }, h('b', {}, '/' + r.shortcut + ' ' + r.title),
+            h('button', { class: 'x', on: { click: (e) => { e.stopPropagation(); void saveQuickReplies(replies.filter((x) => x.id !== r.id)).then(refresh); } } }, icon('x', 12))),
           h('small', {}, r.text)))),
-      h('div', { class: 'sec' }, h('h4', {}, 'Nova resposta rápida'), sc, ti, tx,
+      h('div', { class: 'sec' }, h('h4', {}, 'Nova resposta rápida'),
+        lab('qr-sc', 'Atalho (digite / e o atalho no chat)'), sc, lab('qr-ti', 'Título'), ti,
+        lab('qr-tx', 'Texto. Variáveis: {nome} {primeiro_nome} {saudacao} {data}'), tx,
         h('button', { class: 'btn', on: { click: async () => {
           const s = sc.value.trim().replace(/^\//, '').replace(/\s+/g, '');
           if (!s || !tx.value.trim()) return toast(root, 'Informe atalho e texto.');
           await saveQuickReplies([...replies, { id: uid(), shortcut: s, title: ti.value.trim() || s, text: tx.value }]);
           refresh();
         } } }, 'Salvar resposta')),
-      h('div', { class: 'sec' }, h('h4', {}, 'Regras: se a mensagem contém → sugerir'),
-        ...rules.map((r: Rule) => h('div', { class: 'row' }, h('span', {}, `"${r.keyword}" → ${replies.find((q) => q.id === r.quickReplyId)?.title ?? '?'}`),
-          h('button', { class: 'x', on: { click: () => void saveRules(rules.filter((x) => x.id !== r.id)).then(refresh) } }, '✕'))),
-        h('div', { style: 'margin-top:8px' }, kw, qrSel,
+      h('div', { class: 'sec' }, h('h4', {}, 'Regras de sugestão'),
+        ...rules.map((r: Rule) => h('div', { class: 'row' }, h('span', {}, `Se contém "${r.keyword}", sugere ${replies.find((q) => q.id === r.quickReplyId)?.title ?? 'resposta removida'}`),
+          h('button', { class: 'x', on: { click: () => void saveRules(rules.filter((x) => x.id !== r.id)).then(refresh) } }, icon('x', 12)))),
+        h('div', { style: 'margin-top:8px' }, lab('rl-kw', 'Quando a mensagem recebida contém'), kw, lab('rl-qr', 'Sugerir a resposta'), qrSel,
           h('button', { class: 'btn', on: { click: async () => {
             const k = kw.value.trim();
             if (!k || !qrSel.value) return toast(root, 'Informe a palavra-chave e a resposta.');
@@ -165,7 +169,7 @@ export function mountPanel(root: ShadowRoot): Panel {
         h('p', { class: 'muted' }, 'Se o contato não for detectado ou algo parar de funcionar após uma atualização do WhatsApp, copie o diagnóstico (números mascarados).'),
         h('button', { class: 'btn ghost', on: { click: async () => { await navigator.clipboard.writeText(collectDiagnostics()); toast(root, 'Diagnóstico copiado.'); } } }, 'Copiar diagnóstico')),
       h('div', { class: 'sec' }, h('h4', {}, 'Atalhos'),
-        h('p', { class: 'muted' }, 'Alt+K abre o Kanban · Alt+P abre este painel · digite / no chat para respostas rápidas.')),
+        h('p', { class: 'muted' }, 'Alt+K abre o Kanban. Alt+P abre este painel. Digite / no chat para usar respostas rápidas.')),
     ];
   }
 

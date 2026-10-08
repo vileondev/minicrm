@@ -2,6 +2,8 @@ import { mountKanban } from '../components/Kanban';
 import { mountPanel } from '../components/Sidebar';
 import { mountQuickReplyPopup, mountSuggestionToast } from '../components/QuickReplyPopup';
 import { h } from '../components/h';
+import { icon } from '../components/icons';
+import { loadFonts } from './fonts';
 import { getQuickReplies, getRules } from '../storage/chromeStore';
 import { todayStr } from '../utils/format';
 import { refreshBadges } from './chatList';
@@ -10,7 +12,7 @@ import { startObserver } from './observer';
 import { reloadState, state, watchState } from './state';
 
 async function init() {
-  await reloadState();
+  await Promise.all([reloadState(), loadFonts()]);
   const root = mountShadowRoot();
   const kanban = mountKanban(root);
   const panel = mountPanel(root);
@@ -19,8 +21,9 @@ async function init() {
 
   // dock: botões na lateral esquerda do WhatsApp
   const badge = h('span', { class: 'badge hidden' });
-  const kbBtn = h('button', { title: 'Kanban (Alt+K)', on: { click: () => kanban.toggle() } }, '▦', badge);
-  root.append(h('div', { class: 'dock' }, kbBtn, h('button', { title: 'Contato (Alt+P)', on: { click: () => panel.toggle() } }, '☰')));
+  const kbBtn = h('button', { title: 'Kanban (Alt+K)', 'aria-label': 'Abrir Kanban', on: { click: () => kanban.toggle() } }, icon('kanban', 20), badge);
+  root.append(h('div', { class: 'dock' }, kbBtn,
+    h('button', { title: 'Contato (Alt+P)', 'aria-label': 'Abrir painel do contato', on: { click: () => panel.toggle() } }, icon('panel', 20))));
 
   const updateBadge = () => {
     const late = state.contacts.reduce((a, c) => a + c.tasks.filter((t) => !t.done && t.due && t.due < todayStr()).length, 0);

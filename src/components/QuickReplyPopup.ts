@@ -4,6 +4,7 @@ import { getComposer, getComposerText, replaceTokenWithText } from '../utils/dom
 import { applyVars } from '../utils/format';
 import { state } from '../content/state';
 import { h } from './h';
+import { icon } from './icons';
 
 const TOKEN = /(?:^|\s)(\/[^\s/]*)$/; // "/atalho" no fim do texto, no começo ou após espaço
 
@@ -33,8 +34,8 @@ export function mountQuickReplyPopup(root: ShadowRoot): void {
     popup.replaceChildren(
       ...items.map((qr, i) =>
         h('div', { class: 'item' + (i === sel ? ' sel' : ''), on: { mousedown: (e) => { e.preventDefault(); choose(qr); } } },
-          h('b', {}, '/' + qr.shortcut + '  ·  ' + qr.title), h('small', {}, applyVars(qr.text, state.chat)))),
-      h('div', { class: 'hint' }, '↑↓ navegar · Enter/Tab inserir · Esc fechar'),
+          h('b', {}, '/' + qr.shortcut + '  ' + qr.title), h('small', {}, applyVars(qr.text, state.chat)))),
+      h('div', { class: 'hint' }, 'Setas navegam, Enter insere, Esc fecha'),
     );
     const box = getComposer()?.getBoundingClientRect();
     if (box) {
@@ -95,7 +96,7 @@ export function mountSuggestionToast(root: ShadowRoot): (qr: QuickReply) => void
     el.replaceChildren(
       h('span', {}, 'Sugestão de resposta: ' + qr.title),
       h('button', { class: 'btn', on: { click: () => { el.classList.add('hidden'); void replaceTokenWithText(0, applyVars(qr.text, state.chat)); } } }, 'Inserir'),
-      h('button', { class: 'x', on: { click: () => el.classList.add('hidden') } }, '✕'),
+      h('button', { class: 'x', on: { click: () => el.classList.add('hidden') } }, icon('x', 12)),
     );
     el.classList.remove('hidden');
     window.clearTimeout(timer);

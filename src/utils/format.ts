@@ -6,7 +6,8 @@ export function hashHue(s: string): number {
   return h;
 }
 
-export const tagColor = (tag: string) => `hsl(${hashHue(tag.toLowerCase())} 62% 42%)`;
+export const tagHue = (tag: string) => hashHue(tag.toLowerCase());
+export const tagColor =(tag: string) => `hsl(${hashHue(tag.toLowerCase())} 62% 42%)`;
 export const avatarColor = (name: string) => `hsl(${hashHue(name)} 45% 42%)`;
 export const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';

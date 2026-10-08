@@ -3,7 +3,7 @@ import { MESSAGE_ID_PATTERN, queryAll } from '../utils/domSelectors';
 import { getComposer } from '../utils/domHelpers';
 import { state } from './state';
 
-/** Resumo do que a extensão enxerga no DOM — ajuda a ajustar domSelectors.ts quando o WhatsApp muda. */
+/** Resumo do que a extensão enxerga no DOM - ajuda a ajustar domSelectors.ts quando o WhatsApp muda. */
 export function collectDiagnostics(): string {
   const root = conversationRoot();
   const ids = Array.from(document.querySelectorAll('[data-id]'))
