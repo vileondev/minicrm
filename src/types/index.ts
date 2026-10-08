@@ -53,8 +53,23 @@ export interface Contact {
   isGroup?: boolean;
   internal?: boolean; // grupo/contato interno: fora do funil, das métricas e dos fluxos
   stageHistory?: StageEvent[]; // a última entrada é a etapa atual
+  status?: ConvStatus; // ausente = aberta
+  resolvedAt?: number;
+  awaitingSince?: number; // cliente mandou a última mensagem e ainda não foi respondido (desde quando)
+  lastMsgAt?: number; // última mensagem vista nesta conversa (qualquer lado)
+  fields?: Record<string, string>; // valores dos campos personalizados, por id do campo
   createdAt: number;
   updatedAt: number;
+}
+
+export type ConvStatus = 'open' | 'resolved';
+
+/** Campo personalizado criado pelo usuário (aparece no painel, no CSV, na busca e como variável {slug}). */
+export interface FieldDef {
+  id: string;
+  name: string;
+  type: 'text' | 'number' | 'date' | 'select';
+  options?: string[]; // só para "select"
 }
 
 export interface StageEvent {
@@ -66,6 +81,8 @@ export interface StageEvent {
 export interface ViewPrefs {
   hideGroups: boolean;
   showInternal: boolean;
+  statusFilter: 'all' | 'awaiting' | 'open' | 'resolved';
+  autoOpen: boolean; // abre o CRM em tela cheia assim que o WhatsApp carrega
 }
 
 export interface ChatContext {

@@ -1,7 +1,7 @@
 import type { ChatContext } from '../types';
 import { GROUP_SUBTITLE_PATTERN, HEADER_STATUS_PATTERN, MESSAGE_ID_PATTERN, PHONE_TEXT_PATTERN, queryFirst } from '../utils/domSelectors';
 import { sanitizePhone } from '../utils/domHelpers';
-import { normalizeName } from '../utils/format';
+import { looseName, normalizeName } from '../utils/format';
 import { isOutgoing, splitReply } from './messages';
 
 /** Painel da conversa aberta: ancestral do composer que também contém um <header>. Não depende de #main. */
@@ -31,6 +31,19 @@ function isGroupHeader(root: HTMLElement): boolean {
   return [...lines, ...attrs].some((l) => GROUP_SUBTITLE_PATTERN.test(l));
 }
 
+/**
+ * Outro sinal de grupo: mensagem RECEBIDA cujo autor não é o nome da conversa. Numa conversa individual quem
+ * escreve para você é sempre o próprio contato; num grupo, cada balão traz o nome de quem mandou.
+ * Necessário porque o cabeçalho do grupo mostra "clique para dados do grupo" antes da lista de participantes.
+ */
+function hasOtherAuthors(root: HTMLElement, chatName: string): boolean {
+  const target = looseName(chatName);
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-pre-plain-text]')).some((el) => {
+    const author = el.getAttribute('data-pre-plain-text')?.match(/\]\s*(.*?):\s*$/)?.[1] ?? '';
+    return !!author && looseName(author) !== target && !isOutgoing(el, root, author, chatName, false);
+  });
+}
+
 interface Idf { id: string; digits: string; kind: string }
 
 function messageIds(root: ParentNode): Idf[] {
@@ -57,7 +70,7 @@ export function readChatContext(): ChatContext | null {
   if (lid) return { key: 'lid' + lid.digits, number: PHONE_TEXT_PATTERN.test(name) ? sanitizePhone(name) : null, name, isGroup: false, byName: false };
   if (!name) return null;
   // data-id sem telefone (formato atual do WhatsApp): grupo é reconhecido pela linha de participantes "…, Você"
-  if (isGroupHeader(root)) return { key: 'name_' + normalizeName(name), number: null, name, isGroup: true, byName: true };
+  if (isGroupHeader(root) || hasOtherAuthors(root, name)) return { key: 'name_' + normalizeName(name), number: null, name, isGroup: true, byName: true };
   if (PHONE_TEXT_PATTERN.test(name)) {
     const n = sanitizePhone(name);
     return { key: n, number: n, name, isGroup: false, byName: false };
@@ -80,7 +93,8 @@ export function startObserver(h: ObserverHandlers): () => void {
   const scan = () => {
     const ctx = readChatContext();
     // a chave pode "subir de nível" (name_ → telefone) quando as mensagens carregam: troca de chat só se mudou o nome ou o tipo
-    const key = ctx?.key ?? null;
+    // muda de conversa, ou a mesma conversa foi reconhecida como grupo depois que o cabeçalho carregou
+    const key = ctx ? `${ctx.key}|${ctx.isGroup}` : null;
     if (key !== currentKey) {
       currentKey = key;
       seen = new Set();

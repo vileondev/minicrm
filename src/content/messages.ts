@@ -56,7 +56,21 @@ export interface Msg {
   time: string;
   author: string;
   media?: string; // "áudio", "foto"… quando o balão é (ou tem) mídia
+  img?: string; // foto: blob: do próprio WhatsApp (mesma página, dá para exibir na nossa tela)
+  at?: number; // horário completo, quando o WhatsApp informa a data (balões de texto)
 }
+
+/** "[12:38, 06/10/2026]" -> timestamp local. Formato do WhatsApp em português (dia/mês/ano). */
+function parseStamp(raw: string): number | undefined {
+  const m = raw.match(/(\d{1,2}):(\d{2}),?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return undefined;
+  const [, hh, mm, d, mo, y] = m.map(Number) as number[];
+  const t = new Date(y!, mo! - 1, d!, hh, mm).getTime();
+  return Number.isNaN(t) ? undefined : t;
+}
+
+const photoOf = (row: HTMLElement) =>
+  Array.from(row.querySelectorAll<HTMLImageElement>('img[src^="blob:"]')).find((i) => i.getBoundingClientRect().width >= 80)?.src;
 
 /** Primeiro tipo de mídia encontrado no balão, com o elemento que o denunciou (usado para saber o lado da tela). */
 function detectMedia(row: HTMLElement): { label: string; el: HTMLElement } | null {
@@ -89,7 +103,8 @@ export function readMessages(chatName: string, limit = 40): Msg[] {
     const author = m[2] ?? '';
     const media = detectMedia(el.closest<HTMLElement>('[data-id]') ?? el);
     const label = media && VISUAL_MEDIA.has(media.label) ? media.label : undefined;
-    units.push({ node: el, msg: { out: isOutgoing(el, root, author, chatName, isGroup), text: label ? `[${label}] ${text}` : text, quote, time: (m[1] ?? '').split(',')[0] ?? '', author, media: label } });
+    const img = label === 'foto' ? photoOf(el.closest<HTMLElement>('[data-id]') ?? el) : undefined;
+    units.push({ node: el, msg: { out: isOutgoing(el, root, author, chatName, isGroup), text: label ? `[${label}] ${text}` : text, quote, time: (m[1] ?? '').split(',')[0] ?? '', author, media: label, img, at: parseStamp(m[1] ?? '') } });
   });
 
   // linhas de mensagem sem texto (só a mais externa de cada [data-id])
@@ -97,7 +112,8 @@ export function readMessages(chatName: string, limit = 40): Msg[] {
     if (row.parentElement?.closest('[data-id]') || row.querySelector('[data-pre-plain-text]')) return;
     const media = detectMedia(row);
     if (!media) return;
-    units.push({ node: row, msg: { out: isOutgoing(media.el, root, '', chatName, isGroup), text: `[${media.label}]`, time: timeOf(row), author: '', media: media.label } });
+    const img = media.label === 'foto' ? photoOf(row) : undefined;
+    units.push({ node: row, msg: { out: isOutgoing(media.el, root, '', chatName, isGroup), text: `[${media.label}]`, time: timeOf(row), author: '', media: media.label, img } });
   });
 
   units.sort((a, b) => (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
@@ -115,4 +131,22 @@ export async function waitForChat(name: string, key?: string, timeoutMs = 4000):
     await sleep(150);
   }
   return false;
+}
+
+/** Contêiner com rolagem da conversa aberta (o ancestral rolável das mensagens). */
+function messagePane(): HTMLElement | null {
+  const first = conversationRoot()?.querySelector<HTMLElement>('[data-pre-plain-text], [data-id]');
+  for (let el = first?.parentElement ?? null; el; el = el.parentElement) {
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+  }
+  return null;
+}
+
+/** Rola a conversa do WhatsApp para cima: ele carrega mensagens anteriores, que aparecem na nossa tela. */
+export function loadOlderMessages(): boolean {
+  const pane = messagePane();
+  if (!pane) return false;
+  pane.scrollTop = 0;
+  return true;
 }

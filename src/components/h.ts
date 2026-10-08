@@ -18,11 +18,27 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
       }
     }
   }
-  for (const c of children) if (c !== null && c !== undefined && c !== false) el.append(typeof c === 'number' ? String(c) : c);
+  // estados vazios são flex em coluna: cada frase vira um item, senão textos vizinhos se colam ("etapa.Arraste")
+  const wrapText = /(^|\s)empty(\s|$)/.test(el.className);
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    const node = typeof c === 'number' ? String(c) : c;
+    el.append(wrapText && typeof node === 'string' ? h('span', {}, node) : node);
+  }
   return el;
 }
 
 export const uid = () => crypto.randomUUID();
+
+/** Mensagem de erro de um campo: aparece abaixo dele e é lida por leitores de tela. */
+export function fieldError(): { el: HTMLElement; show(input: HTMLElement, msg: string): void; clear(input?: HTMLElement): void } {
+  const el = h('p', { class: 'field-err hidden', role: 'alert' });
+  return {
+    el,
+    show(input, msg) { el.textContent = msg; el.classList.remove('hidden'); input.setAttribute('aria-invalid', 'true'); input.focus(); },
+    clear(input) { el.classList.add('hidden'); input?.removeAttribute('aria-invalid'); },
+  };
+}
 
 export function toast(root: ShadowRoot, msg: string): void {
   const t = h('div', { class: 'msg' }, msg);
