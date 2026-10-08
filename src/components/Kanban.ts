@@ -8,15 +8,25 @@ import { funnelStats, inFunnel, isGroupContact, stageProbability, weightedValue 
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
-import { addDays, applyVars, avatarColor, initials, looseName, money, normalizeName, tagHue, todayStr } from '../utils/format';
+import { addDays, applyVars, avatarColor, fullDate, initials, looseName, money, normalizeName, relDay, relTime, tagHue, todayStr } from '../utils/format';
+import { isAwaiting, setStatus } from '../content/conversations';
+import { fieldVars } from './ContactPanel';
 import { h, toast, uid } from './h';
 import { icon } from './icons';
 
-export interface Kanban {
-  toggle(): void;
-  close(): void;
+export type FunnelMode = 'board' | 'tasks' | 'report';
+
+export interface Funnel {
+  el: HTMLElement;
+  setMode(mode: FunnelMode): void;
   refresh(): void;
   refreshChat(): void;
+}
+
+export interface FunnelOptions {
+  /** Leva o lead para a caixa de entrada com a conversa aberta. */
+  openConversation(c: Contact): void;
+  isVisible(): boolean;
 }
 
 const HEAT_LABEL = { quente: 'Quente', morno: 'Morno', frio: 'Frio' } as const;
@@ -26,22 +36,19 @@ const openTasks = (c: Contact) => c.tasks.filter((t) => !t.done).length;
 const iconBtn = (name: Parameters<typeof icon>[0], title: string, onClick: (e: Event) => void, cls = 'x') =>
   h('button', { class: cls, title, 'aria-label': title, on: { click: onClick } }, icon(name));
 
-export function mountKanban(root: ShadowRoot): Kanban {
-  const overlay = h('div', { class: 'kb hidden', role: 'dialog', 'aria-label': 'Funil de vendas' });
-  root.append(overlay);
+/** Funil, tarefas e relatório: uma seção do app (o menu lateral do app escolhe o modo). */
+export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
+  const overlay = h('div', { class: 'kb' });
   let query = '';
   let tagFilter = '';
   let editing: string | null = null;
   let sortBy: 'recent' | 'score' | 'value' = 'recent';
-  let mode: 'board' | 'tasks' | 'report' = 'board';
-  let split = false;
-  let ratio = 0.55; // fração da tela para o WhatsApp no modo dividido
-  let savedStyle: string | null | undefined;
+  let mode: FunnelMode = 'board';
   let chatFor: string | null = null; // contato com o chat aberto dentro do card
   let chatError: string | null = null;
   const drafts = new Map<string, string>(); // rascunhos por contato
 
-  const isOpen = () => !overlay.classList.contains('hidden');
+  const isOpen = () => opts.isVisible();
   // nome comparado só por letras e dígitos: o lead "Lucas" casa com a conversa "Lucas 🚀"
   const sameChat = (c: Contact) => !!state.chat && (state.chat.key === c.phone || looseName(state.chat.name) === looseName(c.name));
 
@@ -50,8 +57,12 @@ export function mountKanban(root: ShadowRoot): Kanban {
     return list.filter((c) => {
       if (!inFunnel(c)) return false;
       if (tagFilter && !c.tags.includes(tagFilter)) return false;
+      const sf = state.view.statusFilter;
+      if (sf === 'awaiting' && !isAwaiting(c)) return false;
+      if (sf === 'open' && c.status === 'resolved') return false;
+      if (sf === 'resolved' && c.status !== 'resolved') return false;
       if (!q) return true;
-      return normalizeName([c.name, c.phone, ...c.tags, ...c.notes.map((n) => n.text)].join(' ')).includes(q);
+      return normalizeName([c.name, c.phone, c.number ?? '', ...c.tags, ...c.notes.map((n) => n.text), ...Object.values(c.fields ?? {})].join(' ')).includes(q);
     });
   }
 
@@ -78,38 +89,8 @@ export function mountKanban(root: ShadowRoot): Kanban {
     await saveStages(state.stages.filter((s) => s.id !== stage.id));
   }
 
-  /**
-   * Modo dividido: o WhatsApp inteiro é encolhido para a direita (position/width/transform no #app, revertido ao sair)
-   * e o Kanban ocupa a esquerda. O transform faz o #app virar o referencial dos elementos absolute/fixed internos.
-   */
-  function setSplit(on: boolean): boolean {
-    const app = document.getElementById('app');
-    if (!app) return false;
-    if (on) {
-      if (savedStyle === undefined) savedStyle = app.getAttribute('style');
-      const w = Math.min(Math.max(640, Math.round(innerWidth * ratio)), innerWidth - 320);
-      Object.assign(app.style, { position: 'fixed', top: '0', right: '0', bottom: '0', left: 'auto', width: w + 'px', height: '100%', transform: 'translateZ(0)' });
-      overlay.style.right = w + 'px';
-    } else {
-      if (savedStyle !== undefined) {
-        if (savedStyle === null) app.removeAttribute('style');
-        else app.setAttribute('style', savedStyle);
-        savedStyle = undefined;
-      }
-      overlay.style.right = '0';
-    }
-    split = on;
-    window.dispatchEvent(new Event('resize')); // o WhatsApp recalcula o layout
-    return true;
-  }
-
-  async function open(c: Contact) {
-    if (!split && !setSplit(true)) overlay.classList.add('hidden');
-    if ((await openChat(c.name, c.number ?? c.phone)) === 'not-found') {
-      overlay.classList.remove('hidden');
-      toast(root, 'Não encontrei a conversa "' + c.name + '" na lista. Role a lista ou pesquise manualmente.');
-    }
-    render();
+  function open(c: Contact) {
+    opts.openConversation(c);
   }
 
   /* ---------- chat dentro do card ---------- */
@@ -127,7 +108,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
       box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), h('span', {}, chatError,
         h('div', { class: 'inline wrap', style: 'margin-top:8px' },
           h('button', { class: 'btn ghost sm', on: { click: () => void retryChat(c) } }, 'Tentar de novo'),
-          split ? null : h('button', { class: 'btn ghost sm', title: 'Mostra o WhatsApp ao lado para você abrir a conversa', on: { click: () => { setSplit(true); render(); } } }, 'Abrir WhatsApp ao lado'),
+          h('button', { class: 'btn ghost sm', title: 'Mostra o WhatsApp original para você abrir a conversa', on: { click: () => { document.dispatchEvent(new CustomEvent('wacrm-show-whatsapp')); } } }, 'Abrir no WhatsApp'),
           openNow ? h('button', { class: 'btn sm', title: 'Liga este lead à conversa que está aberta no WhatsApp', on: { click: () => void adoptOpenChat(c) } }, `Usar "${openNow.name}"`) : null))));
     } else if (sameChat(c)) {
       box.replaceChildren(h('div', { class: 'state' }, 'Nenhuma mensagem de texto visível. Fotos e áudios não aparecem aqui.'));
@@ -148,8 +129,8 @@ export function mountKanban(root: ShadowRoot): Kanban {
     chatError = null;
     if (!sameChat(c)) {
       const found = await openChat(c.name, c.number ?? c.phone);
-      if (found === 'not-found') chatError = `Não achei "${c.name}" na lista nem na pesquisa do WhatsApp. Abra a conversa no WhatsApp ao lado e clique em "Usar…" para ligar o lead a ela.`;
-      else if (!(await waitForChat(c.name, c.phone))) chatError = `Cliquei em "${c.name}", mas a conversa não abriu. Abra-a no WhatsApp ao lado e clique em "Usar…".`;
+      if (found === 'not-found') chatError = `Não achei "${c.name}" na lista nem na pesquisa do WhatsApp. Abra a conversa pelo WhatsApp original e clique em "Usar…" para ligar o lead a ela.`;
+      else if (!(await waitForChat(c.name, c.phone))) chatError = `Cliquei em "${c.name}", mas a conversa não abriu. Abra-a pelo WhatsApp original e clique em "Usar…".`;
     }
     refreshChat();
   }
@@ -220,7 +201,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
     });
     const chips = h('div', { class: 'qchips' }, ...state.quickReplies.slice(0, 6).map((r) =>
       h('button', { class: 'pill', title: r.text, on: { click: () => {
-        const text = applyVars(r.text, { key: c.phone, number: null, name: c.name, isGroup: false, byName: false });
+        const text = applyVars(r.text, { key: c.phone, number: null, name: c.name, isGroup: false, byName: false }, fieldVars(c));
         ta.value = ta.value ? ta.value + ' ' + text : text;
         drafts.set(c.phone, ta.value);
         ta.focus();
@@ -229,7 +210,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
       h('div', { class: 'inline wrap' },
         h('button', { class: 'btn', on: { click: () => void sendFromCard(c, ta) } }, icon('send'), 'Enviar'),
         h('button', { class: 'btn ghost', title: 'A IA atualiza o CRM e sugere um rascunho de resposta (você envia)', on: { click: () => void analyzeFromCard(c, ta) } }, icon('sparkle'), 'Analisar'),
-        h('button', { class: 'btn ghost', title: 'Abre o WhatsApp completo ao lado', on: { click: () => void open(c) } }, icon('open-out'), 'WhatsApp')));
+        h('button', { class: 'btn ghost', title: 'Abre esta conversa na caixa de entrada', on: { click: () => void open(c) } }, icon('open-out'), 'Abrir conversa')));
     queueMicrotask(() => fillMsgs(msgs, c));
     return box;
   }
@@ -239,7 +220,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
   function card(c: Contact): HTMLElement {
     const late = lateTasks(c);
     const expanded = chatFor === c.phone;
-    const el = h('div', { class: 'card' + (expanded ? ' open' : '') + (split && sameChat(c) ? ' sel' : ''), draggable: !expanded,
+    const el = h('div', { class: 'card' + (expanded ? ' open' : '') + (sameChat(c) ? ' sel' : ''), draggable: !expanded,
       on: {
         dragstart: (e) => { (e as DragEvent).dataTransfer?.setData('text/plain', c.phone); el.classList.add('drag'); },
         dragend: () => el.classList.remove('drag'),
@@ -248,11 +229,15 @@ export function mountKanban(root: ShadowRoot): Kanban {
       h('div', { class: 'card-top' },
         h('div', { class: 'avatar', style: `background:${avatarColor(c.name)}` }, initials(c.name)),
         h('b', {}, c.name || c.phone),
+        h('div', { class: 'card-acts' + (expanded ? ' show' : '') },
         iconBtn('chat', expanded ? 'Fechar conversa' : 'Conversar', (e) => { e.stopPropagation(); void toggleChat(c); }),
+        iconBtn('check', c.status === 'resolved' ? 'Reabrir conversa' : 'Marcar como resolvida', (e) => { e.stopPropagation(); void setStatus(c, c.status === 'resolved' ? 'open' : 'resolved'); }, c.status === 'resolved' ? 'x on' : 'x'),
         iconBtn(c.internal ? 'eye' : 'eye-off', c.internal ? 'Voltar para o funil' : 'Marcar como interno (sai do funil e dos fluxos)', (e) => { e.stopPropagation(); void setInternal(c, !c.internal); }),
-        iconBtn('trash', 'Excluir lead', (e) => { e.stopPropagation(); if (confirm(`Excluir "${c.name}" do CRM?`)) void deleteContact(c.phone); }, 'x danger')),
+        iconBtn('trash', 'Excluir lead', (e) => { e.stopPropagation(); if (confirm(`Excluir "${c.name}" do CRM?`)) void deleteContact(c.phone); }, 'x danger'))),
       expanded ? chatBox(c) : null,
-      c.heat || c.tags.length || c.internal || isGroupContact(c) ? h('div', { class: 'chips' },
+      c.heat || c.tags.length || c.internal || isGroupContact(c) || isAwaiting(c) || c.status === 'resolved' ? h('div', { class: 'chips' },
+        isAwaiting(c) ? h('span', { class: 'heat morno', title: 'Cliente mandou a última mensagem em ' + fullDate(c.awaitingSince!) }, 'Aguardando ' + relTime(c.awaitingSince!)) : null,
+        c.status === 'resolved' ? h('span', { class: 'heat frio' }, 'Resolvida') : null,
         isGroupContact(c) ? h('span', { class: 'heat frio' }, 'Grupo') : null,
         c.internal ? h('span', { class: 'heat frio' }, 'Interno') : null,
         c.heat ? h('span', { class: 'heat ' + c.heat }, `${HEAT_LABEL[c.heat]}${c.score !== undefined ? ' ' + c.score : ''}`) : null,
@@ -261,7 +246,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
       h('div', { class: 'meta' },
         c.value ? h('span', {}, icon('coins', 14), money(c.value)) : null,
         openTasks(c) ? h('span', { class: late ? 'late' : '' }, icon(late ? 'warning' : 'check', 14), late ? `${late} atrasada${late > 1 ? 's' : ''}` : `${openTasks(c)} tarefa${openTasks(c) > 1 ? 's' : ''}`) : null,
-        h('span', {}, icon('calendar', 14), new Date(c.updatedAt).toLocaleDateString('pt-BR'))));
+        h('span', { title: 'Atualizado em ' + fullDate(c.lastMsgAt ?? c.updatedAt) }, icon('calendar', 14), relTime(c.lastMsgAt ?? c.updatedAt))));
     return el;
   }
 
@@ -284,11 +269,9 @@ export function mountKanban(root: ShadowRoot): Kanban {
 
     col.append(h('div', { class: 'col-head' },
       h('div', { class: 'grow' },
-        h('div', { class: 'name' }, h('span', { class: 'dot', style: `background:${stage?.color ?? 'var(--muted)'}` }), stage?.name ?? 'Sem etapa', h('span', { class: 'count' }, mine.length)),
-        stage || sum ? h('span', { class: 'sum', title: 'Valor total · valor ponderado pela chance de fechar' },
-          sum ? `${money(sum)} · ${money(weighted)} pond.` : '', stage ? `${sum ? ' · ' : ''}${stageProbability(stage)}%` : '') : null),
-      stage ? iconBtn('caret-left', 'Mover etapa para a esquerda', () => void reorder(stage, -1)) : null,
-      stage ? iconBtn('caret-right', 'Mover etapa para a direita', () => void reorder(stage, 1)) : null,
+        h('div', { class: 'name' }, h('span', { class: 'dot', style: `background:${stage?.color ?? 'var(--muted)'}` }), stage?.name ?? 'Sem etapa', h('span', { class: 'count' }, mine.length),
+          stage ? h('span', { class: 'prob', title: 'Chance de fechar a partir desta etapa' }, stageProbability(stage) + '%') : null),
+        sum ? h('span', { class: 'sum', title: 'Valor total e valor ponderado pela chance de fechar' }, `${money(sum)} · ${money(weighted)} pond.`) : null),
       stage ? iconBtn('gear', 'Editar etapa', () => { editing = editing === stage.id ? null : stage.id; render(); }) : null));
 
     if (stage && editing === stage.id) {
@@ -304,7 +287,10 @@ export function mountKanban(root: ShadowRoot): Kanban {
         h('label', { class: 'field', for: name.id }, 'Nome da etapa'), name,
         h('label', { class: 'field', for: color.id }, 'Cor'), color,
         h('label', { class: 'field', for: prob.id }, 'Chance de fechar (%)'), prob,
-        h('button', { class: 'btn ghost sm', on: { click: () => void removeStage(stage) } }, icon('trash', 14), 'Excluir etapa')));
+        h('div', { class: 'inline wrap' },
+          h('button', { class: 'btn ghost sm', on: { click: () => void reorder(stage, -1) } }, icon('caret-left', 14), 'Mover'),
+          h('button', { class: 'btn ghost sm', on: { click: () => void reorder(stage, 1) } }, 'Mover', icon('caret-right', 14)),
+          h('button', { class: 'btn ghost sm', on: { click: () => void removeStage(stage) } }, icon('trash', 14), 'Excluir etapa'))));
     }
 
     const body = h('div', { class: 'col-body' }, ...mine.sort((a, b) => (sortBy === 'score' ? (b.score ?? -1) - (a.score ?? -1) : sortBy === 'value' ? b.value - a.value : 0) || b.updatedAt - a.updatedAt).map(card));
@@ -392,9 +378,9 @@ export function mountKanban(root: ShadowRoot): Kanban {
         h('input', { type: 'checkbox', 'aria-label': 'Concluir tarefa', on: { change: () => void updateTask(c, t, { done: true }) } }),
         h('div', { class: 'avatar', style: `background:${avatarColor(c.name)}` }, initials(c.name)),
         h('div', { class: 'grow' }, h('b', {}, t.text), h('span', { class: 'muted' }, c.name)),
-        t.due ? h('span', { class: 'due' }, new Date(t.due + 'T00:00').toLocaleDateString('pt-BR')) : null,
+        t.due ? h('span', { class: 'due', title: new Date(t.due + 'T00:00').toLocaleDateString('pt-BR') }, relDay(t.due)) : null,
         h('button', { class: 'btn ghost sm', title: 'Muda o prazo para amanhã', on: { click: () => void updateTask(c, t, { due: addDays(1) }) } }, 'Amanhã'),
-        h('button', { class: 'btn ghost sm', title: 'Abre a conversa ao lado', on: { click: () => void open(c) } }, icon('chat', 14), 'Conversa'));
+        h('button', { class: 'btn ghost sm', title: 'Abre a conversa na caixa de entrada', on: { click: () => void open(c) } }, icon('chat', 14), 'Conversa'));
     };
 
     const sections = groups.map(([label, test]) => {
@@ -410,8 +396,8 @@ export function mountKanban(root: ShadowRoot): Kanban {
     const list = state.contacts.filter(inFunnel);
     const stats = funnelStats(list);
     const max = Math.max(1, ...stats.map((s) => s.entered));
-    const days = (d: number | null) => (d === null ? '–' : d < 1 ? '< 1 dia' : `${d.toFixed(d < 10 ? 1 : 0).replace('.', ',')} dias`);
-    const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) + '%' : '–');
+    const days = (d: number | null) => (d === null ? '-' : d < 1 ? '< 1 dia' : `${d.toFixed(d < 10 ? 1 : 0).replace('.', ',')} dias`);
+    const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) + '%' : '-');
     const first = stats[0];
     const last = stats[stats.length - 1];
 
@@ -423,7 +409,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
             h('div', { class: 'bar' }, h('span', { style: `width:${(s.entered / max) * 100}%;background:${s.stage.color}` }))),
           h('td', { class: 'num' }, s.entered),
           h('td', { class: 'num' }, s.current),
-          h('td', { class: 'num', title: 'Dos que passaram por esta etapa, quantos chegaram a uma etapa seguinte' }, s === last ? '–' : `${s.advanced} (${pct(s.advanced, s.entered)})`),
+          h('td', { class: 'num', title: 'Dos que passaram por esta etapa, quantos chegaram a uma etapa seguinte' }, s === last ? '-' : `${s.advanced} (${pct(s.advanced, s.entered)})`),
           h('td', { class: 'num' }, days(s.avgDays)),
           h('td', { class: 'num' }, money(s.value)),
           h('td', { class: 'num' }, money(s.weighted)))))),
@@ -446,6 +432,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
     const total = funnel.reduce((a, c) => a + c.value, 0);
     const weighted = funnel.reduce((a, c) => a + weightedValue(c), 0);
     const late = funnel.reduce((a, c) => a + lateTasks(c), 0);
+    const awaiting = funnel.filter(isAwaiting).length;
     const stages = state.stages.slice().sort((a, b) => a.order - b.order);
 
     const search = h('input', { type: 'search', 'aria-label': 'Buscar', placeholder: mode === 'tasks' ? 'Buscar tarefa ou lead' : 'Buscar lead, tag ou nota', value: query,
@@ -474,55 +461,43 @@ export function mountKanban(root: ShadowRoot): Kanban {
       next.scrollLeft = scroll;
     }
 
-    const modeBtn = (id: typeof mode, label: string, ic: Parameters<typeof icon>[0]) =>
-      h('button', { class: 'pill' + (mode === id ? ' on' : ''), 'aria-pressed': String(mode === id), on: { click: () => { mode = id; render(); } } }, icon(ic, 14), label);
     const toggle = (on: boolean, label: string, title: string, fn: () => void) =>
       h('button', { class: 'pill' + (on ? ' on' : ''), 'aria-pressed': String(on), title, on: { click: fn } }, icon(on ? 'eye' : 'eye-off', 14), label);
 
     overlay.replaceChildren(
       h('div', { class: 'kb-top' },
-        h('h2', {}, 'Funil de vendas'),
+        h('h2', {}, mode === 'board' ? 'Funil de vendas' : mode === 'tasks' ? 'Tarefas' : 'Relatório do funil'),
         h('div', { class: 'kb-metrics' },
           h('div', { class: 'metric' }, h('span', {}, 'Leads'), h('b', {}, funnel.length)),
           h('div', { class: 'metric' }, h('span', {}, 'Valor total'), h('b', {}, money(total))),
           h('div', { class: 'metric', title: 'Soma de valor × chance de fechar da etapa (sem etapa: nota da IA)' }, h('span', {}, 'Valor ponderado'), h('b', {}, money(weighted))),
-          h('div', { class: 'metric' + (late ? ' alert' : '') }, h('span', {}, 'Tarefas atrasadas'), h('b', {}, late))),
-        h('div', { class: 'seg' }, modeBtn('board', 'Quadro', 'kanban'), modeBtn('tasks', 'Tarefas', 'tasks'), modeBtn('report', 'Relatório', 'chart')),
+          h('div', { class: 'metric' + (late ? ' alert' : '') }, h('span', {}, 'Tarefas atrasadas'), h('b', {}, late)),
+          h('div', { class: 'metric' + (awaiting ? ' warn' : '') }, h('span', {}, 'Aguardando resposta'), h('b', {}, awaiting))),
         h('span', { class: 'kb-spacer' }),
         mode !== 'report' ? h('div', { class: 'search' }, icon('search'), search) : null,
         mode === 'board' ? tagSel : null,
+        mode === 'board' ? h('select', { 'aria-label': 'Filtrar por status', on: { change: (e) => void setView({ statusFilter: (e.target as HTMLSelectElement).value as typeof state.view.statusFilter }) } },
+          ...([['all', 'Todos os status'], ['awaiting', 'Aguardando resposta'], ['open', 'Abertas'], ['resolved', 'Resolvidas']] as const).map(([v, l]) =>
+            h('option', { value: v, selected: state.view.statusFilter === v }, l))) : null,
         mode === 'board' ? h('select', { 'aria-label': 'Ordenar cards', on: { change: (e) => { sortBy = (e.target as HTMLSelectElement).value as typeof sortBy; render(); } } },
           h('option', { value: 'recent', selected: sortBy === 'recent' }, 'Mais recentes'),
           h('option', { value: 'score', selected: sortBy === 'score' }, 'Mais quentes'),
           h('option', { value: 'value', selected: sortBy === 'value' }, 'Maior valor')) : null,
-        toggle(!state.view.hideGroups, 'Grupos', 'Mostrar conversas de grupo no funil', () => void setView({ hideGroups: !state.view.hideGroups })),
-        toggle(state.view.showInternal, 'Internos', 'Mostrar contatos marcados como internos', () => void setView({ showInternal: !state.view.showInternal })),
-        h('button', { class: 'btn ghost', title: 'Adiciona o chat aberto ao funil', on: { click: async () => { if (state.chat) { await getOrCreateContact(state.chat); toast(root, 'Chat adicionado ao funil.'); } else toast(root, 'Abra uma conversa primeiro.'); } } }, icon('plus'), 'Chat atual'),
-        h('button', { class: 'btn ghost', title: 'Cria leads com as conversas visíveis na lista', on: { click: () => void importVisible() } }, icon('users'), 'Importar'),
-        h('button', { class: 'btn ghost', on: { click: exportCsv } }, icon('download'), 'CSV'),
-        split ? h('button', { class: 'btn ghost', title: 'Alterna a largura do chat', on: { click: () => { ratio = ratio >= 0.7 ? 0.45 : ratio + 0.125; setSplit(true); render(); } } }, icon('arrows-lr'), 'Largura') : null,
-        split ? h('button', { class: 'btn ghost', on: { click: () => { setSplit(false); render(); } } }, icon('fullscreen'), 'Tela cheia') : null,
-        h('button', { class: 'btn', title: 'Esc', on: { click: () => api.close() } }, icon('x'), 'Fechar')),
+        mode === 'tasks' ? null : toggle(!state.view.hideGroups, 'Grupos', 'Mostrar conversas de grupo no funil', () => void setView({ hideGroups: !state.view.hideGroups })),
+        mode === 'tasks' ? null : toggle(state.view.showInternal, 'Internos', 'Mostrar contatos marcados como internos', () => void setView({ showInternal: !state.view.showInternal })),
+        mode !== 'board' ? null : h('button', { class: 'btn ghost', title: 'Adiciona o chat aberto ao funil', on: { click: async () => { if (state.chat) { await getOrCreateContact(state.chat); toast(root, 'Chat adicionado ao funil.'); } else toast(root, 'Abra uma conversa primeiro.'); } } }, icon('plus'), 'Chat atual'),
+        mode !== 'board' ? null : h('button', { class: 'btn ghost', title: 'Cria leads com as conversas visíveis na lista', on: { click: () => void importVisible() } }, icon('users'), 'Importar'),
+        mode === 'tasks' ? null : h('button', { class: 'btn ghost', on: { click: exportCsv } }, icon('download'), 'CSV'),
+      ),
       body());
     if (!root.activeElement && mode !== 'report') search.focus(); // não rouba o foco de outro campo (ex.: edição de etapa)
   }
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isOpen() && !(e.target instanceof HTMLInputElement)) api.close();
-  }, true);
-
-  window.addEventListener('resize', (e) => { if (split && e.isTrusted) setSplit(true); });
-
-  const api: Kanban = {
-    toggle() {
-      if (isOpen()) return api.close();
-      overlay.classList.remove('hidden');
+  const api: Funnel = {
+    el: overlay,
+    setMode(m) {
+      if (m !== mode) { mode = m; chatFor = null; }
       render();
-    },
-    close() {
-      setSplit(false);
-      chatFor = null;
-      overlay.classList.add('hidden');
     },
     refresh: render,
     refreshChat,

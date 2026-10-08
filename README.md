@@ -2,10 +2,10 @@
 
 # WA Local CRM
 
-**Um CRM completo dentro do WhatsApp Web. Gratuito, open source e 100% local.**
+**Um CRM completo por cima do WhatsApp Web. Gratuito, open source e 100% local.**
 
-Kanban de vendas, tarefas, relatório do funil, respostas rápidas, automações e um assistente de IA opcional,
-tudo rodando no seu navegador. Seus dados não saem do seu computador.
+Caixa de entrada com status, funil de vendas, tarefas, relatório, respostas rápidas, automações e um assistente
+de IA opcional, tudo rodando no seu navegador. Seus dados não saem do seu computador.
 
 [![Licença: GPL v3 ou posterior](https://img.shields.io/badge/licen%C3%A7a-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome%20%2F%20Edge-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
@@ -14,22 +14,51 @@ tudo rodando no seu navegador. Seus dados não saem do seu computador.
 
 </div>
 
+![Caixa de entrada: lista de conversas com status e etiquetas, conversa no centro e dados do contato à direita](docs/screenshots/inbox.png)
+
 ---
 
 ## O que ele faz
 
+Assim que o WhatsApp Web carrega, o CRM abre em tela cheia por cima dele. O WhatsApp continua funcionando por baixo:
+é dele que vêm as conversas e é por ele que as mensagens saem. Um clique na barra lateral mostra o WhatsApp original.
+
 | Recurso | O que faz |
 |---|---|
-| **Kanban de vendas** | Arraste leads entre etapas, filtre por tag, ordene pelos mais quentes e exporte CSV. Alt+K abre. |
-| **Chat dentro do card** | Leia e responda a conversa sem sair do Kanban. Áudios, fotos e figurinhas aparecem como marcadores. |
+| **Caixa de entrada** | Conversas, chat e dados do contato lado a lado. Filtros por aguardando resposta, leads e resolvidas. |
+| **Status da conversa** | Aberta ou resolvida. A extensão marca quem está esperando resposta e reabre a conversa se o cliente escrever de novo. |
+| **Funil de vendas** | Arraste leads entre etapas, filtre por tag e status, ordene pelos mais quentes e exporte CSV. |
 | **Tarefas** | Todas as tarefas de todos os leads, agrupadas em atrasadas, hoje e próximos dias. |
 | **Relatório do funil** | Quantos leads passaram por cada etapa, conversão, tempo médio e valor ponderado. |
-| **Etiquetas na lista** | A etapa e as tags aparecem ao lado do nome de cada conversa. |
-| **Respostas rápidas** | Digite `/` no chat. Aceita `{nome}`, `{primeiro_nome}`, `{saudacao}` e `{data}`. |
+| **Campos personalizados** | Crie campos como cidade ou forma de pagamento. Eles entram no painel, na busca, no CSV e nas respostas rápidas. |
+| **Etiquetas** | Cores, renomear e apagar em um lugar só, valendo para todos os contatos e fluxos. |
+| **Respostas rápidas** | Digite `/` no campo de mensagem. Aceita `{nome}`, `{primeiro_nome}`, `{saudacao}`, `{data}` e os seus campos. |
+| **Transcrição** | Copie ou baixe a conversa em .txt, com autor e horário. |
 | **Automações locais** | "Lead parado 3 dias → criar follow-up", "cliente pediu preço → mover etapa". Nenhuma automação envia mensagem. |
 | **Assistente de IA (opcional)** | Com a sua chave da Anthropic, OpenAI ou Google Gemini: temperatura do lead, resumo, próximo passo e rascunho de resposta. Você revisa e envia. |
 | **Grupos e internos** | Grupos ficam fora do funil por padrão; contatos da equipe podem ser marcados como internos. |
 | **Backup** | Exporte e importe tudo em JSON. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/funnel.png" alt="Funil de vendas com colunas por etapa, valor ponderado e status em cada card"></td>
+    <td width="50%"><img src="docs/screenshots/tasks.png" alt="Tarefas de todos os leads agrupadas em atrasadas, hoje e próximos 7 dias"></td>
+  </tr>
+  <tr>
+    <td align="center">Funil de vendas</td>
+    <td align="center">Tarefas</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/report.png" alt="Relatório do funil com conversão e tempo médio por etapa"></td>
+    <td width="50%"><img src="docs/screenshots/settings.png" alt="Ajustes com campos personalizados e as variáveis geradas"></td>
+  </tr>
+  <tr>
+    <td align="center">Relatório do funil</td>
+    <td align="center">Ajustes</td>
+  </tr>
+</table>
+
+<sub>Prints com dados fictícios.</sub>
 
 ## Privacidade
 
@@ -43,8 +72,8 @@ não entra no backup.
 
 ## Como funciona
 
-A extensão lê a página do WhatsApp Web, guarda o CRM no próprio navegador e desenha a interface por cima,
-isolada num Shadow DOM. Só o assistente de IA, quando ligado, faz chamadas externas, e elas saem do service worker
+A extensão lê a página do WhatsApp Web, guarda o CRM no próprio navegador e desenha o app em tela cheia por cima,
+isolado num Shadow DOM. Só o assistente de IA, quando ligado, faz chamadas externas, e elas saem do service worker
 direto para o provedor que você escolheu.
 
 ```mermaid
@@ -54,7 +83,7 @@ flowchart LR
     subgraph EXT["Extensão (no seu navegador)"]
         direction TB
         CS["Content script<br/>observer, leitura de mensagens,<br/>fluxos de automação"]
-        UI["Interface em Shadow DOM<br/>Kanban, tarefas, relatório, painel"]
+        UI["App em tela cheia (Shadow DOM)<br/>conversas, funil, tarefas, relatório, ajustes"]
         DB[("IndexedDB<br/>contatos, tarefas, notas")]
         ST[("chrome.storage<br/>etapas, respostas, fluxos")]
         SW["Service worker<br/>(só para a IA)"]
@@ -108,7 +137,7 @@ Isso cria a pasta **`dist`**, que é a extensão pronta.
 3. Clique em **Carregar sem pacote** e escolha a pasta **`dist`**.
 4. Abra (ou recarregue) [web.whatsapp.com](https://web.whatsapp.com).
 
-Pronto: os botões do CRM aparecem na lateral esquerda do WhatsApp.
+Pronto: depois de entrar no WhatsApp, o CRM abre em tela cheia.
 
 ### Atualizar para uma versão nova
 
@@ -125,18 +154,21 @@ Se você baixou o ZIP, baixe de novo e repita os passos 3 e 4.
 
 ## Primeiros passos
 
-1. **Abra o Kanban** com o primeiro botão da lateral do WhatsApp ou **Alt+K**.
-2. Clique em **Chat atual** para pôr a conversa aberta no funil, ou em **Importar** para trazer as conversas visíveis na lista.
-3. **Abra o painel do contato** com o segundo botão da lateral ou **Alt+P** para definir etapa, valor, tags, tarefas e notas.
-4. Em **Respostas** (no painel), crie seus atalhos e use-os digitando `/` no chat.
-5. Quer IA? No painel, vá em **IA**, ligue o assistente, escolha o provedor e cole a sua chave.
+1. Abra o WhatsApp Web. O CRM aparece sozinho quando ele termina de carregar (dá para desligar em **Ajustes → Dados e backup**).
+2. Em **Conversas**, escolha uma conversa e clique em **Adicionar ao funil**. Na coluna da direita, defina etapa, valor, tags, campos e tarefas.
+3. Responda pelo campo de mensagem e marque **Resolver** quando terminar. Se o cliente escrever de novo, a conversa reabre.
+4. Em **Ajustes**, crie respostas rápidas, campos personalizados, etiquetas e fluxos.
+5. Quer IA? Em **Ajustes → Assistente de IA**, ligue o assistente, escolha o provedor e cole a sua chave.
+
+Anexos, áudios e chamadas continuam no WhatsApp original: use o ícone do WhatsApp na barra lateral e volte pelo
+botão verde que aparece no canto.
 
 | Atalho | Ação |
 |---|---|
-| `Alt+K` | Abrir ou fechar o Kanban |
-| `Alt+P` | Abrir ou fechar o painel do contato |
-| `/` no chat | Respostas rápidas |
-| `Esc` | Fechar o Kanban |
+| `Alt+K` | Alternar entre o CRM e o WhatsApp original |
+| `Alt+P` | Painel do contato sobre o WhatsApp original |
+| `/` no campo de mensagem | Respostas rápidas |
+| `Enter` / `Shift+Enter` | Enviar / quebrar a linha |
 
 ### Onde conseguir uma chave de IA
 
@@ -154,8 +186,11 @@ O uso é cobrado pelo provedor, na sua conta.
 
 **O CRM não aparece no WhatsApp:** confira se a extensão está ativada em `chrome://extensions` e dê F5 no WhatsApp.
 
-**Não encontra a conversa de um lead:** o card mostra **Abrir WhatsApp ao lado** e **Usar "conversa"**. Abra a conversa
-manualmente e ligue o lead a ela. No painel do contato, **Ler do perfil** vincula o número do contato, o que deixa a busca mais confiável.
+**Não abre a conversa de um lead:** use **Tentar de novo** ou **Abrir no WhatsApp** e abra a conversa por lá. Na coluna
+de dados do contato, **Ler do perfil** vincula o número do telefone, o que deixa a busca bem mais confiável.
+
+**Quero usar o WhatsApp normal:** clique no ícone do WhatsApp na barra lateral ou aperte **Alt+K**. Para não abrir o CRM
+sozinho, desligue a opção em **Ajustes → Dados e backup**.
 
 **Parou de funcionar depois de uma atualização do WhatsApp:** o WhatsApp muda o site com frequência. No painel, vá em
 **Dados → Copiar diagnóstico** (os números saem mascarados) e abra uma [issue](https://github.com/vileondev/minicrm/issues) com ele.
@@ -177,7 +212,7 @@ Contribuições são muito bem-vindas: correções, novos recursos, traduções,
 |---|---|
 | `src/utils/domSelectors.ts` | Todos os seletores do WhatsApp. **Comece por aqui quando o WhatsApp mudar.** |
 | `src/content/` | Entrada, observer, leitura de mensagens, lista de conversas, métricas, automações e IA |
-| `src/components/` | Kanban, painel do contato, fluxos, assistente de IA e respostas rápidas (Shadow DOM) |
+| `src/components/` | App em tela cheia (Shadow DOM): caixa de entrada, funil, tarefas, relatório, ajustes e painel do contato |
 | `src/storage/` | IndexedDB (contatos) e `chrome.storage.local` (etapas, respostas, fluxos, configurações) |
 | `src/background.ts` | Service worker: única parte que fala com as APIs de IA |
 

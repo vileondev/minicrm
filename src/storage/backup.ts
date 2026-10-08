@@ -1,5 +1,5 @@
-import type { Automation, Contact, QuickReply, Rule, Stage } from '../types';
-import { getAutomations, getQuickReplies, getRules, getStages, saveAutomations, saveQuickReplies, saveRules, saveStages } from './chromeStore';
+import type { Automation, Contact, FieldDef, QuickReply, Rule, Stage } from '../types';
+import { getAutomations, getFields, getQuickReplies, getRules, getStages, getTagColors, saveAutomations, saveFields, saveQuickReplies, saveRules, saveStages, saveTagColors } from './chromeStore';
 import { getAllContacts, replaceAllContacts } from './db';
 
 interface Backup {
@@ -9,6 +9,8 @@ interface Backup {
   quickReplies: QuickReply[];
   rules: Rule[];
   automations?: Automation[]; // a chave de API da IA NÃO entra no backup
+  fields?: FieldDef[];
+  tagColors?: Record<string, number>;
   contacts: Contact[];
 }
 
@@ -20,6 +22,8 @@ export async function exportBackup(): Promise<string> {
     quickReplies: await getQuickReplies(),
     rules: await getRules(),
     automations: await getAutomations(),
+    fields: await getFields(),
+    tagColors: await getTagColors(),
     contacts: await getAllContacts(),
   };
   return JSON.stringify(data, null, 2);
@@ -32,6 +36,8 @@ export async function importBackup(json: string): Promise<number> {
   await saveQuickReplies(data.quickReplies ?? []);
   await saveRules(data.rules ?? []);
   await saveAutomations(data.automations ?? []);
+  await saveFields(data.fields ?? []);
+  await saveTagColors(data.tagColors ?? {});
   await replaceAllContacts(data.contacts);
   return data.contacts.length;
 }

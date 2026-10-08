@@ -6,8 +6,11 @@ export function hashHue(s: string): number {
   return h;
 }
 
-export const tagHue = (tag: string) => hashHue(tag.toLowerCase());
-export const tagColor =(tag: string) => `hsl(${hashHue(tag.toLowerCase())} 62% 42%)`;
+let tagHueOverrides: Record<string, number> = {};
+/** Cores escolhidas na tela de etiquetas (chave: etiqueta em minúsculas). */
+export const setTagHues = (map: Record<string, number>) => { tagHueOverrides = map; };
+export const tagHue = (tag: string) => tagHueOverrides[tag.toLowerCase()] ?? hashHue(tag.toLowerCase());
+export const tagColor = (tag: string) => `hsl(${tagHue(tag)} 62% 42%)`;
 export const avatarColor = (name: string) => `hsl(${hashHue(name)} 45% 42%)`;
 // primeira letra/dígito de cada palavra: p[0] partiria emojis ao meio ("Lucas 🚀" virava "L\uD83D")
 export const initials = (name: string) =>
@@ -24,8 +27,11 @@ export function greeting(): string {
   return hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
 }
 
-/** Variáveis das respostas rápidas. */
-export function applyVars(text: string, chat: ChatContext | null): string {
+/** "Cidade de entrega" -> "cidade_de_entrega": nome de variável de um campo personalizado. */
+export const slug = (s: string) => normalizeName(s).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+/** Variáveis das respostas rápidas. `extra` traz os campos personalizados do contato ({slug} -> valor). */
+export function applyVars(text: string, chat: ChatContext | null, extra: Record<string, string> = {}): string {
   const name = chat && !chat.byName && /^\+?[\d\s().-]+$/.test(chat.name) ? '' : chat?.name ?? '';
   const first = name.split(/\s+/)[0] ?? '';
   const values: Record<string, string> = {
@@ -35,9 +41,39 @@ export function applyVars(text: string, chat: ChatContext | null): string {
     data: new Date().toLocaleDateString('pt-BR'),
   };
   // aceita {nome}, {{nome}}, (nome) e [nome]; com ou sem acento e underscore
-  return text.replace(/(?:\{\{?|\(|\[)\s*(nome|primeiro[_ ]?nome|sauda[cç][aã]o|data)\s*(?:\}\}?|\)|\])/gi, (_m, k: string) =>
+  const out = text.replace(/(?:\{\{?|\(|\[)\s*(nome|primeiro[_ ]?nome|sauda[cç][aã]o|data)\s*(?:\}\}?|\)|\])/gi, (_m, k: string) =>
     values[k.toLowerCase().replace(/[_ ]/g, '').replace('ç', 'c').replace('ã', 'a')] ?? _m);
+  return out.replace(/\{\{?\s*([\p{L}\w ]+?)\s*\}\}?/gu, (m, k: string) => extra[slug(k)] ?? m);
 }
+
+const DAY = 86400000;
+
+/** "agora", "há 5 min", "há 2 h", "ontem", "há 3 dias"; mais de uma semana vira data. */
+export function relTime(ts: number, now = Date.now()): string {
+  const diff = now - ts;
+  if (diff < 60000) return 'agora';
+  if (diff < 3600000) return `há ${Math.floor(diff / 60000)} min`;
+  const today = new Date(now).toLocaleDateString('sv-SE');
+  const day = new Date(ts).toLocaleDateString('sv-SE');
+  if (day === today) return `há ${Math.floor(diff / 3600000)} h`;
+  const days = Math.round((Date.parse(today) - Date.parse(day)) / DAY);
+  if (days === 1) return 'ontem';
+  if (days < 7) return `há ${days} dias`;
+  return new Date(ts).toLocaleDateString('pt-BR');
+}
+
+/** Prazo "YYYY-MM-DD" relativo a hoje: "hoje", "amanhã", "ontem", "em 3 dias", "há 2 dias". */
+export function relDay(date: string): string {
+  const days = Math.round((Date.parse(date) - Date.parse(todayStr())) / DAY);
+  if (days === 0) return 'hoje';
+  if (days === 1) return 'amanhã';
+  if (days === -1) return 'ontem';
+  if (days > 1 && days < 7) return `em ${days} dias`;
+  if (days < -1 && days > -7) return `há ${-days} dias`;
+  return new Date(date + 'T00:00').toLocaleDateString('pt-BR');
+}
+
+export const fullDate = (ts: number) => new Date(ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
 export const normalizeName = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
