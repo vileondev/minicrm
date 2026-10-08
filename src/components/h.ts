@@ -30,6 +30,16 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
 
 export const uid = () => crypto.randomUUID();
 
+/** Mensagem de erro de um campo: aparece abaixo dele e é lida por leitores de tela. */
+export function fieldError(): { el: HTMLElement; show(input: HTMLElement, msg: string): void; clear(input?: HTMLElement): void } {
+  const el = h('p', { class: 'field-err hidden', role: 'alert' });
+  return {
+    el,
+    show(input, msg) { el.textContent = msg; el.classList.remove('hidden'); input.setAttribute('aria-invalid', 'true'); input.focus(); },
+    clear(input) { el.classList.add('hidden'); input?.removeAttribute('aria-invalid'); },
+  };
+}
+
 export function toast(root: ShadowRoot, msg: string): void {
   const t = h('div', { class: 'msg' }, msg);
   root.append(t);

@@ -7,7 +7,7 @@ import { state } from '../content/state';
 import { sanitizePhone } from '../utils/domHelpers';
 import { fullDate, looseName, relDay, relTime, slug, tagHue, todayStr } from '../utils/format';
 import { icon } from './icons';
-import { h, toast, uid } from './h';
+import { fieldError, h, toast, uid } from './h';
 
 /** Lead da conversa: pela chave ou, para leads importados só pelo nome, pelo nome. */
 export function leadFor(chat: ChatContext): { existing?: Contact; legacy?: Contact } {
@@ -154,9 +154,32 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
   /* ---------- tarefas e notas ---------- */
   const taskIn = h('input', { id: 'cp-task', placeholder: 'Ex.: enviar proposta' });
   const dueIn = h('input', { type: 'date', 'aria-label': 'Prazo da tarefa', value: '' });
-  const addTask = () => { const v = taskIn.value.trim(); if (v) { contact.tasks = [...contact.tasks, { id: uid(), text: v, done: false, createdAt: Date.now(), due: dueIn.value || undefined }]; void save(); } };
-  taskIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTask(); });
+  const taskErr = fieldError();
+  const addTask = async () => {
+    const v = taskIn.value.trim();
+    if (!v) return taskErr.show(taskIn, 'Escreva o que precisa ser feito.');
+    if (dueIn.value && dueIn.value < todayStr()) return taskErr.show(dueIn, 'Esse prazo já passou. Escolha hoje ou uma data futura.');
+    taskErr.clear(taskIn);
+    taskErr.clear(dueIn);
+    contact.tasks = [...contact.tasks, { id: uid(), text: v, done: false, createdAt: Date.now(), due: dueIn.value || undefined }];
+    await save();
+    toast(root, `Tarefa criada: "${v}"${dueIn.value ? `, prazo ${relDay(dueIn.value)}` : ''}.`);
+    (root.activeElement as HTMLElement | null)?.blur(); // libera o painel para mostrar a tarefa na lista
+  };
+  taskIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') void addTask(); });
+  taskIn.addEventListener('input', () => taskErr.clear(taskIn));
+  dueIn.addEventListener('change', () => taskErr.clear(dueIn));
   const noteIn = h('textarea', { id: 'cp-note', placeholder: 'Escreva uma nota sobre este contato' });
+  const noteErr = fieldError();
+  noteIn.addEventListener('input', () => noteErr.clear(noteIn));
+  const addNote = async () => {
+    const v = noteIn.value.trim();
+    if (!v) return noteErr.show(noteIn, 'A nota está vazia.');
+    contact.notes = [{ id: uid(), text: v, createdAt: Date.now() }, ...contact.notes];
+    await save();
+    toast(root, 'Nota adicionada.');
+    (root.activeElement as HTMLElement | null)?.blur();
+  };
 
   /* ---------- conversa ---------- */
   const convSec = h('div', { class: 'sec' }, h('h4', {}, 'Conversa'),
@@ -181,9 +204,11 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
         h('span', { class: 'due muted', title: t.due ? new Date(t.due + 'T00:00').toLocaleDateString('pt-BR') : '' }, t.due ? relDay(t.due) : ''),
         h('button', { class: 'x', title: 'Apagar tarefa', 'aria-label': 'Apagar tarefa', on: { click: () => { contact.tasks = contact.tasks.filter((x) => x.id !== t.id); void save(); } } }, icon('x', 12)))),
       h('div', { style: 'margin-top:8px' }, h('label', { class: 'field', for: 'cp-task' }, 'Nova tarefa'), taskIn,
-        h('div', { class: 'inline' }, dueIn, h('button', { class: 'btn sm', on: { click: addTask } }, 'Adicionar')))),
+        h('div', { class: 'inline' }, dueIn, h('button', { class: 'btn sm', on: { click: () => void addTask() } }, 'Adicionar')),
+        taskErr.el)),
     h('div', { class: 'sec' }, h('h4', {}, 'Notas'), noteIn,
-      h('button', { class: 'btn sm', on: { click: () => { const v = noteIn.value.trim(); if (v) { contact.notes = [{ id: uid(), text: v, createdAt: Date.now() }, ...contact.notes]; void save(); } } } }, 'Adicionar nota'),
+      noteErr.el,
+      h('button', { class: 'btn sm', on: { click: () => void addNote() } }, 'Adicionar nota'),
       h('div', { style: 'margin-top:8px' }, ...contact.notes.map((n) => h('div', { class: 'note' }, n.text,
         h('div', { class: 'muted' }, h('span', { title: fullDate(n.createdAt) }, relTime(n.createdAt)), ' ',
           h('button', { class: 'x', on: { click: () => { contact.notes = contact.notes.filter((x) => x.id !== n.id); void save(); } } }, 'remover')))))),

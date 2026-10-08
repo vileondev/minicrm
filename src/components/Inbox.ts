@@ -5,9 +5,9 @@ import { openChat, rowNames } from '../content/chatList';
 import { findLead, isAwaiting, loadMoreConversations, readConversations, setStatus, type ConvRow } from '../content/conversations';
 import { loadOlderMessages, readMessages, waitForChat, type Msg } from '../content/messages';
 import { state } from '../content/state';
-import { clearComposer, clearSearch, replaceTokenWithText, sendComposer, typeInSearch } from '../utils/domHelpers';
+import { clearComposer, clearSearch, replaceTokenWithText, sendComposer, sendFiles, typeInSearch } from '../utils/domHelpers';
 import { queryAll } from '../utils/domSelectors';
-import { applyVars, avatarColor, fullDate, initials, looseName, normalizeName, relTime, tagHue } from '../utils/format';
+import { applyVars, avatarColor, fullDate, hashHue, initials, looseName, normalizeName, relTime, tagHue } from '../utils/format';
 import { contactPanel, fieldVars, leadFor } from './ContactPanel';
 import { icon } from './icons';
 import { h, toast } from './h';
@@ -91,15 +91,72 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   let qrItems: QuickReply[] = [];
   let qrSel = 0;
   const sendBtn = h('button', { class: 'btn', on: { click: () => void send() } }, icon('send'), 'Enviar');
+
+  /* fotos: escolhidas pelo botão, coladas (Ctrl+V) ou arrastadas para a conversa */
+  const MAX_FILES = 10;
+  const MAX_BYTES = 16 * 1024 * 1024; // limite do WhatsApp para fotos
+  let files: { file: File; url: string }[] = [];
+  let sending = false;
+  const tray = h('div', { class: 'ib-attach hidden', 'aria-label': 'Fotos para enviar' });
+  const picker = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'hidden', 'aria-hidden': 'true', tabindex: '-1' });
+  picker.addEventListener('change', () => { addFiles([...(picker.files ?? [])]); picker.value = ''; });
+  const photoBtn = h('button', { class: 'x', title: 'Enviar foto (você também pode colar ou arrastar)', 'aria-label': 'Escolher foto para enviar', on: { click: () => picker.click() } }, icon('image'));
   const aiBtn = h('button', { class: 'x', title: 'Analisar com IA e sugerir resposta', 'aria-label': 'Analisar com IA', on: { click: () => void analyze() } }, icon('sparkle'));
-  const composer = h('div', { class: 'ib-composer' }, qrPop, ta,
+  const composer = h('div', { class: 'ib-composer' }, qrPop, tray, ta, picker,
     h('div', { class: 'ib-tools' },
+      photoBtn,
       h('button', { class: 'x', title: 'Respostas rápidas', 'aria-label': 'Respostas rápidas', on: { click: () => openQuickReplies('') } }, icon('lightning')),
       aiBtn,
-      h('button', { class: 'x', title: 'Anexos, áudio e figurinhas: use o WhatsApp original', 'aria-label': 'Abrir o WhatsApp original para anexar', on: { click: () => opts.showWhatsApp() } }, icon('whatsapp')),
+      h('button', { class: 'x', title: 'Áudio, documentos e figurinhas: use o WhatsApp original', 'aria-label': 'Abrir o WhatsApp original', on: { click: () => opts.showWhatsApp() } }, icon('whatsapp')),
       h('span', { class: 'kb-spacer' }),
       sendBtn));
   const chatCol = h('section', { class: 'ib-col ib-chat', 'aria-label': 'Conversa' }, chatHead, banner, chatSearch, msgsEl, composer);
+  chatCol.addEventListener('dragover', (e) => {
+    if (!state.chat || !e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    chatCol.classList.add('dropping');
+  });
+  chatCol.addEventListener('dragleave', (e) => { if (!chatCol.contains(e.relatedTarget as Node)) chatCol.classList.remove('dropping'); });
+  chatCol.addEventListener('drop', (e) => {
+    chatCol.classList.remove('dropping');
+    if (!state.chat || !e.dataTransfer?.files.length) return;
+    e.preventDefault();
+    addFiles([...e.dataTransfer.files]);
+  });
+
+  function addFiles(list: File[]) {
+    const images = list.filter((f) => f.type.startsWith('image/'));
+    if (images.length < list.length) toast(root, 'Por aqui só vão fotos. Áudio e documentos, pelo WhatsApp original.');
+    const big = images.filter((f) => f.size > MAX_BYTES);
+    if (big.length) toast(root, `${big.length} foto(s) acima de 16 MB ficaram de fora.`);
+    const ok = images.filter((f) => f.size <= MAX_BYTES).slice(0, Math.max(0, MAX_FILES - files.length));
+    if (images.length - big.length > ok.length) toast(root, `Envie até ${MAX_FILES} fotos por vez.`);
+    files = [...files, ...ok.map((file) => ({ file, url: URL.createObjectURL(file) }))];
+    renderTray();
+    ta.focus();
+  }
+
+  function clearFiles() {
+    files.forEach((f) => URL.revokeObjectURL(f.url));
+    files = [];
+    renderTray();
+  }
+
+  function renderTray() {
+    tray.classList.toggle('hidden', files.length === 0);
+    tray.replaceChildren(...files.map((f, i) => h('div', { class: 'thumb' },
+      h('img', { src: f.url, alt: f.file.name }),
+      h('button', { class: 'x', title: 'Tirar esta foto', 'aria-label': 'Tirar ' + f.file.name, on: { click: () => {
+        URL.revokeObjectURL(f.url);
+        files = files.filter((_, j) => j !== i);
+        renderTray();
+      } } }, icon('x', 12)))));
+    ta.placeholder = files.length
+      ? `Legenda (opcional). Enter envia ${files.length === 1 ? 'a foto' : `as ${files.length} fotos`}.`
+      : 'Escreva uma mensagem. Enter envia, Shift+Enter quebra a linha, / abre as respostas rápidas.';
+    sendBtn.replaceChildren(icon('send'), sending ? 'Enviando…' : files.length ? (files.length === 1 ? 'Enviar foto' : `Enviar ${files.length} fotos`) : 'Enviar');
+    sendBtn.toggleAttribute('disabled', sending || !state.chat);
+  }
 
   /* ---------- coluna 3: contato ---------- */
   const panelEl = h('div', { class: 'ib-panel' });
@@ -210,6 +267,7 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
       composer.classList.toggle('disabled', true);
       ta.disabled = true;
       sendBtn.setAttribute('disabled', '');
+      photoBtn.setAttribute('disabled', '');
       renderMessages(force);
       return;
     }
@@ -233,10 +291,11 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
     banner.classList.toggle('hidden', !resolved);
     composer.classList.toggle('disabled', false);
     ta.disabled = false;
-    sendBtn.removeAttribute('disabled');
+    if (!sending) sendBtn.removeAttribute('disabled');
+    photoBtn.removeAttribute('disabled');
     aiBtn.classList.toggle('hidden', !state.ai.enabled);
     const draft = drafts.get(chat.key) ?? '';
-    if (ta.dataset.for !== chat.key) { ta.dataset.for = chat.key; ta.value = draft; }
+    if (ta.dataset.for !== chat.key) { ta.dataset.for = chat.key; ta.value = draft; clearFiles(); }
     renderMessages(force);
   }
 
@@ -244,7 +303,7 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   function bubble(m: Msg, group: boolean): HTMLElement {
     const mediaOnly = !!m.media && m.text === `[${m.media}]`;
     return h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') + (mediaOnly ? ' media' : '') },
-      group && !m.out && m.author ? h('div', { class: 'author' }, m.author) : null,
+      group && !m.out && m.author ? h('div', { class: 'author', style: `--h:${hashHue(m.author)}` }, m.author) : null,
       m.quote ? h('div', { class: 'quote' }, m.quote) : null,
       m.img ? h('img', { class: 'photo', src: m.img, alt: 'Foto enviada na conversa' }) : null,
       m.img && mediaOnly ? null : h('span', {}, ...highlight(m.text, chatQuery)),
@@ -291,7 +350,9 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
   async function send() {
     const chat = state.chat;
     const text = ta.value.trim();
-    if (!chat || !text) return;
+    if (!chat || sending) return;
+    if (files.length) return sendPhotos(chat.key, text);
+    if (!text) return;
     ta.value = '';
     drafts.delete(chat.key);
     closeQuickReplies();
@@ -299,6 +360,23 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
     await replaceTokenWithText(0, text);
     await sendComposer(false);
     window.setTimeout(() => renderMessages(), 700);
+  }
+
+  async function sendPhotos(key: string, caption: string) {
+    sending = true;
+    renderTray();
+    const result = await sendFiles(files.map((f) => f.file), caption);
+    sending = false;
+    if (result === 'sent' || result === 'not-confirmed') {
+      clearFiles();
+      ta.value = '';
+      drafts.delete(key);
+      window.setTimeout(() => renderMessages(), 700);
+    } else renderTray();
+    if (result === 'sent') toast(root, 'Foto enviada.');
+    else if (result === 'not-confirmed') { toast(root, 'Confira no WhatsApp original se a foto saiu.'); opts.showWhatsApp(); }
+    else if (result === 'no-editor') { toast(root, 'O WhatsApp não abriu o editor de foto. Abri o WhatsApp original para você enviar por lá.'); opts.showWhatsApp(); }
+    else toast(root, 'Abra uma conversa antes de enviar a foto.');
   }
 
   async function analyze() {
@@ -357,6 +435,12 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
   });
   ta.addEventListener('blur', () => window.setTimeout(closeQuickReplies, 150));
+  ta.addEventListener('paste', (e) => {
+    const pasted = [...(e.clipboardData?.files ?? [])];
+    if (!pasted.length || !state.chat) return;
+    e.preventDefault();
+    addFiles(pasted);
+  });
 
   /* ---------- painel ---------- */
 

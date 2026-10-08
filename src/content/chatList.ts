@@ -1,6 +1,6 @@
 import type { Contact, Stage } from '../types';
 import { queryAll } from '../utils/domSelectors';
-import { clearSearch, sleep, typeInSearch } from '../utils/domHelpers';
+import { clearSearch, realClick, sleep, typeInSearch } from '../utils/domHelpers';
 import { looseName, normalizeName, tagColor } from '../utils/format';
 import { state } from './state';
 
@@ -102,17 +102,6 @@ async function searchAndFind(text: string, find: () => HTMLElement | undefined):
     if (row) return row;
   }
   return undefined;
-}
-
-/** Clique "de verdade": o WhatsApp abre a conversa no mousedown/pointerdown, não só no click. */
-function realClick(el: HTMLElement): void {
-  const r = el.getBoundingClientRect();
-  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
-  el.dispatchEvent(new PointerEvent('pointerdown', { ...opts, pointerType: 'mouse', isPrimary: true }));
-  el.dispatchEvent(new MouseEvent('mousedown', opts));
-  el.dispatchEvent(new PointerEvent('pointerup', { ...opts, pointerType: 'mouse', isPrimary: true }));
-  el.dispatchEvent(new MouseEvent('mouseup', opts));
-  el.dispatchEvent(new MouseEvent('click', opts));
 }
 
 export type OpenResult = 'opened' | 'not-found';

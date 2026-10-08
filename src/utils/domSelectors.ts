@@ -52,6 +52,13 @@ export function queryAll<T extends Element = HTMLElement>(key: SelectorKey, root
 export const PHONE_TEXT_PATTERN = /^\+?\d[\d\s().-]{7,}$/;
 /** data-id de mensagens: "false_5511999999999@c.us_3EB0…", "…@g.us" (grupo), "…@lid". */
 export const MESSAGE_ID_PATTERN = /^(true|false)_(\d+)@(c\.us|g\.us|lid)/;
+/**
+ * Editor de mídia que o WhatsApp abre ao colar uma imagem no campo de mensagem: legenda e botão de enviar.
+ * O botão de enviar do editor é o que NÃO está no rodapé da conversa (lá fica o envio de texto).
+ */
+export const MEDIA_CAPTION = ['[contenteditable="true"][aria-label*="legenda" i]', '[contenteditable="true"][aria-label*="caption" i]', '[contenteditable="true"][aria-placeholder*="legenda" i]'];
+export const MEDIA_SEND = ['[role="button"][aria-label="Enviar"]', 'button[aria-label="Enviar"]', '[role="button"][aria-label="Send"]', 'button[aria-label="Send"]', '[data-icon="send"]', '[data-icon="wds-ic-send-filled"]'];
+
 /** Ícones de status de entrega (relógio, um tique, dois tiques): só aparecem em mensagens enviadas por você. */
 export const OUTGOING_MARKERS = '[data-icon^="msg-check"], [data-icon^="msg-dblcheck"], [data-icon^="msg-time"], [data-icon*="status-check"], [data-icon*="status-dblcheck"], [data-icon*="status-time"]';
 /**

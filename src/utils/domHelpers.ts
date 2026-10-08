@@ -1,4 +1,4 @@
-import { queryFirst } from './domSelectors';
+import { MEDIA_CAPTION, MEDIA_SEND, queryFirst } from './domSelectors';
 
 export const sanitizePhone = (raw: string): string => raw.replace(/\D/g, '');
 
@@ -125,6 +125,80 @@ export async function typeInSearch(text: string): Promise<boolean> {
   document.execCommand('delete');
   pasteText(box, text);
   return true;
+}
+
+/** Clique "de verdade": o WhatsApp reage a pointerdown/mousedown, não só ao click. */
+export function realClick(el: HTMLElement): void {
+  const r = el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+  el.dispatchEvent(new PointerEvent('pointerdown', { ...opts, pointerType: 'mouse', isPrimary: true }));
+  el.dispatchEvent(new MouseEvent('mousedown', opts));
+  el.dispatchEvent(new PointerEvent('pointerup', { ...opts, pointerType: 'mouse', isPrimary: true }));
+  el.dispatchEvent(new MouseEvent('mouseup', opts));
+  el.dispatchEvent(new MouseEvent('click', opts));
+}
+
+const visible = (el: Element) => el.getClientRects().length > 0;
+
+/** Botão de enviar do editor de mídia (o do rodapé é o de texto e não serve). */
+function mediaSendButton(): HTMLElement | null {
+  for (const sel of MEDIA_SEND) {
+    const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find((e) => !e.closest('footer') && visible(e));
+    if (el) return (el.closest<HTMLElement>('button, [role="button"]') ?? el);
+  }
+  return null;
+}
+
+function mediaCaptionBox(): HTMLElement | null {
+  for (const sel of MEDIA_CAPTION) {
+    const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find(visible);
+    if (el) return el;
+  }
+  return null;
+}
+
+export type MediaResult = 'sent' | 'no-composer' | 'no-editor' | 'not-confirmed';
+
+/**
+ * Envia fotos pela conversa aberta: cola os arquivos no campo de mensagem (o WhatsApp abre o editor de mídia,
+ * como quando você cola uma imagem), escreve a legenda e clica em enviar no editor. Só é chamado quando o
+ * usuário clica em Enviar no CRM.
+ */
+export async function sendFiles(files: File[], caption: string): Promise<MediaResult> {
+  const box = getComposer();
+  if (!box) return 'no-composer';
+  box.focus();
+  const stale = mediaSendButton(); // algo parecido já na tela não é o editor que vamos abrir
+  const data = new DataTransfer();
+  files.forEach((f) => data.items.add(f));
+  box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+
+  let send: HTMLElement | null = null;
+  for (let i = 0; i < 40 && !send; i++) {
+    await sleep(150);
+    const found = mediaSendButton();
+    send = found && found !== stale ? found : null;
+  }
+  if (!send) return 'no-editor';
+
+  if (caption) {
+    const cap = mediaCaptionBox();
+    if (cap) {
+      placeCaretAtEnd(cap);
+      pasteText(cap, caption);
+      await sleep(120);
+      if (!cap.innerText.trim()) document.execCommand('insertText', false, caption);
+      await sleep(80);
+    }
+  }
+  await sleep(250);
+  realClick(mediaSendButton() ?? send);
+  for (let i = 0; i < 30; i++) {
+    await sleep(150);
+    const still = mediaSendButton();
+    if (!still || still === stale) return 'sent';
+  }
+  return 'not-confirmed';
 }
 
 /** Esvazia a busca da lista de conversas (depois de abrir um contato por ela). */

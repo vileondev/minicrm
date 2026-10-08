@@ -13,6 +13,7 @@ import downloadSimple from '@phosphor-icons/core/assets/regular/download-simple.
 import eye from '@phosphor-icons/core/assets/regular/eye.svg';
 import eyeSlash from '@phosphor-icons/core/assets/regular/eye-slash.svg';
 import gearSix from '@phosphor-icons/core/assets/regular/gear-six.svg';
+import image from '@phosphor-icons/core/assets/regular/image.svg';
 import kanban from '@phosphor-icons/core/assets/regular/kanban.svg';
 import listChecks from '@phosphor-icons/core/assets/regular/list-checks.svg';
 import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glass.svg';
@@ -55,6 +56,7 @@ const ICONS = {
   eye,
   'eye-off': eyeSlash,
   gear: gearSix,
+  image,
   kanban,
   tasks: listChecks,
   search: magnifyingGlass,
