@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WA Local CRM",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "CRM local, Kanban, fluxos de automação e assistente de IA opcional dentro do WhatsApp Web. Os dados ficam no seu navegador.",
   "permissions": [
     "notifications",
