@@ -38,6 +38,26 @@ export interface StageStats {
   weighted: number;
 }
 
+/**
+ * Conversão de ponta a ponta: dos leads que passaram pela primeira etapa, quantos chegaram depois à última.
+ * Quem entrou direto numa etapa do meio não conta (antes isso podia passar de 100%).
+ */
+export function funnelConversion(contacts: Contact[]): { from: number; reached: number } | null {
+  const stages = sortedStages();
+  const first = stages[0]?.id;
+  const last = stages[stages.length - 1]?.id;
+  if (!first || !last || first === last) return null;
+  let from = 0, reached = 0;
+  for (const c of contacts) {
+    const hist = c.stageHistory ?? [];
+    const i = hist.findIndex((e) => e.stageId === first);
+    if (i < 0) continue;
+    from++;
+    if (hist.slice(i + 1).some((e) => e.stageId === last)) reached++;
+  }
+  return { from, reached };
+}
+
 export function funnelStats(contacts: Contact[]): StageStats[] {
   const stages = sortedStages();
   const order = new Map(stages.map((s, i) => [s.id, i]));

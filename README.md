@@ -40,6 +40,7 @@ Assim que o WhatsApp Web carrega, o CRM abre em tela cheia por cima dele. O What
 | **Transcrição** | Copie ou baixe a conversa em .txt, com autor e horário. |
 | **Automações locais** | "Lead parado 3 dias → criar follow-up", "cliente pediu preço → mover etapa". Nenhuma automação envia mensagem. |
 | **Assistente de IA (opcional)** | Com a sua chave da Anthropic, OpenAI ou Google Gemini: temperatura do lead, resumo, próximo passo e rascunho de resposta. Você revisa e envia. |
+| **Tema claro e escuro** | Botão na barra lateral. Também dá para seguir o tema do WhatsApp. |
 | **Grupos e internos** | Grupos ficam fora do funil por padrão; contatos da equipe podem ser marcados como internos. |
 | **Importar e exportar** | Importe leads por CSV com prévia antes de gravar. Backup completo em JSON. |
 
@@ -180,6 +181,8 @@ botão verde que aparece no canto.
 | `/` no campo de mensagem | Respostas rápidas |
 | `Enter` / `Shift+Enter` | Enviar / quebrar a linha |
 
+Para trocar o tema, use o botão de sol ou lua na barra lateral. Em **Ajustes → Dados e backup** você também pode escolher seguir o tema do WhatsApp.
+
 ### Onde conseguir uma chave de IA
 
 | Provedor | Onde criar a chave | Modelo padrão |
@@ -206,7 +209,8 @@ sozinho, desligue a opção em **Ajustes → Dados e backup**.
 das notificações do navegador liberadas no sistema. Confira também **Ajustes → Dados e backup → Abertura e avisos**.
 
 **A foto não foi enviada:** o CRM usa o editor de fotos do próprio WhatsApp. Se ele não abrir, o WhatsApp original aparece
-para você concluir o envio por lá, e a foto continua anexada no CRM.
+para você concluir o envio por lá, e a foto continua anexada no CRM. Se a legenda não entrar no editor, o texto vai logo
+depois da foto, como mensagem, e o CRM avisa.
 
 **Parou de funcionar depois de uma atualização do WhatsApp:** o WhatsApp muda o site com frequência. No painel, vá em
 **Ajustes → Dados e backup → Copiar diagnóstico** (os números saem mascarados) e abra uma [issue](https://github.com/vileondev/minicrm/issues) com ele.

@@ -338,10 +338,13 @@ function dataView(root: ShadowRoot, refresh: () => void): Node[] {
     try { toast(root, `${await importBackup(await f.text())} contatos importados.`); } catch (err) { toast(root, String(err)); }
   } } });
   return [
-    h('div', { class: 'sec form-card' }, h('h4', {}, 'Abertura e avisos'),
+    h('div', { class: 'sec form-card' }, h('h4', {}, 'Aparência, abertura e avisos'),
       h('label', { class: 'check', for: 'set-autoopen' },
         h('input', { id: 'set-autoopen', type: 'checkbox', checked: state.view.autoOpen, on: { change: (e) => void saveViewPrefs({ ...state.view, autoOpen: (e.target as HTMLInputElement).checked }) } }),
         'Abrir o CRM em tela cheia assim que o WhatsApp carregar'),
+      h('label', { class: 'field', for: 'set-theme' }, 'Tema'),
+      h('select', { id: 'set-theme', on: { change: (e) => void saveViewPrefs({ ...state.view, theme: (e.target as HTMLSelectElement).value as typeof state.view.theme }) } },
+        ...([['auto', 'Seguir o WhatsApp'], ['light', 'Claro'], ['dark', 'Escuro']] as const).map(([v, l]) => h('option', { value: v, selected: state.view.theme === v }, l))),
       h('label', { class: 'check', for: 'set-notify' },
         h('input', { id: 'set-notify', type: 'checkbox', checked: state.view.notifyTasks, on: { change: (e) => void saveViewPrefs({ ...state.view, notifyTasks: (e.target as HTMLInputElement).checked }) } }),
         'Avisar no computador quando uma tarefa vence hoje ou atrasa'),

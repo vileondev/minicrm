@@ -4,7 +4,7 @@ import { blankContact, deleteContact, getOrCreateContact, putContact, rekeyConta
 import { emitDataChange } from '../storage/bus';
 import { openChat, visibleChatNames } from '../content/chatList';
 import { analyzeChat } from '../content/ai';
-import { DAY_MS, funnelStats, inFunnel, isGroupContact, periodStats, stageProbability, weightedValue } from '../content/metrics';
+import { DAY_MS, funnelConversion, funnelStats, inFunnel, isGroupContact, periodStats, stageProbability, weightedValue } from '../content/metrics';
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
@@ -415,6 +415,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
     const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) + '%' : '-');
     const first = stats[0];
     const last = stats[stats.length - 1];
+    const conv = funnelConversion(list);
     const prevLabel = `vs ${reportDays} dias anteriores`;
 
     /** Variação contra o período anterior. `lowerIsBetter` inverte as cores (ex.: tempo até fechar). */
@@ -443,7 +444,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
         card('Vendas fechadas', String(cur.won), delta(cur.won, prev.won), `Leads que chegaram a "${last?.stage.name ?? 'última etapa'}" no período`),
         card('Valor ganho', money(cur.wonValue), delta(cur.wonValue, prev.wonValue), 'Soma do valor das vendas fechadas no período'),
         card('Tarefas concluídas', String(cur.tasksDone), delta(cur.tasksDone, prev.tasksDone), 'Tarefas marcadas como feitas no período'),
-        h('div', { class: 'dash-card wide', title: 'Da entrada no CRM até a última etapa, para as vendas fechadas no período' },
+        h('div', { class: 'dash-card', title: 'Da entrada no CRM até a última etapa, para as vendas fechadas no período' },
           h('span', { class: 'dash-label' }, 'Tempo médio até fechar'), blocks(cur.timeToClose), delta(cur.timeToClose, prev.timeToClose, true))),
 
       h('h3', { class: 'dash-title' }, 'Tempo médio em cada etapa'),
@@ -465,7 +466,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
           h('td', { class: 'num' }, money(s.weighted)))))),
       h('p', { class: 'muted' },
         `Leads sem etapa: ${list.filter((c) => !c.stageId).length}. `,
-        first && last && first !== last ? `De "${first.stage.name}" até "${last.stage.name}": ${pct(last.entered, first.entered)}. ` : '',
+        conv && first && last ? `Dos ${conv.from} leads que passaram por "${first.stage.name}", ${conv.reached} chegaram a "${last.stage.name}" (${pct(conv.reached, conv.from)}). ` : '',
         'O histórico de etapas começou a ser gravado na versão 0.4: leads mais antigos contam a partir da etapa em que estavam.'));
   }
 

@@ -12,6 +12,18 @@ function isDark(): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 < 90;
 }
 
+type ThemePref = 'auto' | 'light' | 'dark';
+let preference: ThemePref = 'auto';
+let syncTheme = () => undefined as void;
+
+/** Tema escolhido no CRM. "auto" acompanha o WhatsApp; claro ou escuro valem mesmo que o WhatsApp esteja no outro. */
+export function setThemePreference(pref: ThemePref): void {
+  preference = pref;
+  syncTheme();
+}
+
+export const currentTheme = (): 'light' | 'dark' => (preference === 'auto' ? (isDark() ? 'dark' : 'light') : preference);
+
 /** Cria o host com Shadow Root (isola o CSS do WhatsApp) e acompanha o tema claro/escuro. */
 export function mountShadowRoot(): ShadowRoot {
   document.getElementById(HOST_ID)?.remove();
@@ -23,7 +35,8 @@ export function mountShadowRoot(): ShadowRoot {
   root.append(style);
   document.documentElement.append(host);
 
-  const sync = () => host.setAttribute('data-theme', isDark() ? 'dark' : 'light');
+  const sync = () => host.setAttribute('data-theme', currentTheme());
+  syncTheme = sync;
   sync();
   new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

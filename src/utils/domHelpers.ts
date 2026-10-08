@@ -149,12 +149,41 @@ function mediaSendButton(): HTMLElement | null {
   return null;
 }
 
-function mediaCaptionBox(): HTMLElement | null {
+const plainText = (el: HTMLElement) => (el.innerText ?? '').replace(/[\u200B\r]/g, '').trim();
+
+/**
+ * Campo de legenda do editor de mídia. O rótulo muda conforme idioma e versão do WhatsApp, então, se ele não bater,
+ * vale o campo que recebeu o foco ao abrir o editor ou o campo de texto mais próximo do botão de enviar do editor.
+ * Nunca o campo de mensagem da conversa nem a busca.
+ */
+function mediaCaptionBox(send: HTMLElement, mainComposer: HTMLElement | null): HTMLElement | null {
+  const search = queryFirst('searchBox');
+  const ok = (el: Element | null): el is HTMLElement =>
+    el instanceof HTMLElement && el.isContentEditable && el !== mainComposer && el !== search && !el.closest('footer') && visible(el);
   for (const sel of MEDIA_CAPTION) {
-    const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find(visible);
+    const el = Array.from(document.querySelectorAll(sel)).find(ok);
     if (el) return el;
   }
+  if (ok(document.activeElement)) return document.activeElement;
+  for (let el = send.parentElement, i = 0; el && i < 12; el = el.parentElement, i++) {
+    const near = Array.from(el.querySelectorAll('[contenteditable="true"]')).find(ok);
+    if (near) return near;
+  }
   return null;
+}
+
+/** Escreve no campo (colagem, depois insertText) e confere se o texto entrou de fato. */
+async function writeCaption(el: HTMLElement, text: string): Promise<boolean> {
+  const probe = text.trim().split('\n')[0]!.slice(0, 20);
+  placeCaretAtEnd(el);
+  pasteText(el, text);
+  await sleep(150);
+  if (!plainText(el).includes(probe)) {
+    el.focus();
+    document.execCommand('insertText', false, text);
+    await sleep(150);
+  }
+  return plainText(el).includes(probe);
 }
 
 export type MediaResult = 'sent' | 'no-composer' | 'no-editor' | 'not-confirmed';
@@ -164,9 +193,9 @@ export type MediaResult = 'sent' | 'no-composer' | 'no-editor' | 'not-confirmed'
  * como quando você cola uma imagem), escreve a legenda e clica em enviar no editor. Só é chamado quando o
  * usuário clica em Enviar no CRM.
  */
-export async function sendFiles(files: File[], caption: string): Promise<MediaResult> {
+export async function sendFiles(files: File[], caption: string): Promise<{ status: MediaResult; captionOk: boolean }> {
   const box = getComposer();
-  if (!box) return 'no-composer';
+  if (!box) return { status: 'no-composer', captionOk: false };
   box.focus();
   const stale = mediaSendButton(); // algo parecido já na tela não é o editor que vamos abrir
   const data = new DataTransfer();
@@ -179,26 +208,22 @@ export async function sendFiles(files: File[], caption: string): Promise<MediaRe
     const found = mediaSendButton();
     send = found && found !== stale ? found : null;
   }
-  if (!send) return 'no-editor';
+  if (!send) return { status: 'no-editor', captionOk: false };
 
+  let captionOk = !caption;
   if (caption) {
-    const cap = mediaCaptionBox();
-    if (cap) {
-      placeCaretAtEnd(cap);
-      pasteText(cap, caption);
-      await sleep(120);
-      if (!cap.innerText.trim()) document.execCommand('insertText', false, caption);
-      await sleep(80);
-    }
+    await sleep(200); // o editor termina de montar o campo de legenda
+    const cap = mediaCaptionBox(send, box);
+    if (cap) captionOk = await writeCaption(cap, caption);
   }
   await sleep(250);
   realClick(mediaSendButton() ?? send);
   for (let i = 0; i < 30; i++) {
     await sleep(150);
     const still = mediaSendButton();
-    if (!still || still === stale) return 'sent';
+    if (!still || still === stale) return { status: 'sent', captionOk };
   }
-  return 'not-confirmed';
+  return { status: 'not-confirmed', captionOk };
 }
 
 /** Esvazia a busca da lista de conversas (depois de abrir um contato por ela). */

@@ -108,6 +108,7 @@ export interface ViewPrefs {
   showInternal: boolean;
   statusFilter: 'all' | 'awaiting' | 'open' | 'resolved';
   autoOpen: boolean; // abre o CRM em tela cheia assim que o WhatsApp carrega
+  theme: 'auto' | 'light' | 'dark'; // auto = segue o tema do WhatsApp
   notifyTasks: boolean; // avisos do sistema para tarefas que vencem hoje ou atrasaram
 }
 
