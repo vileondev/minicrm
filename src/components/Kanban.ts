@@ -11,7 +11,7 @@ import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domH
 import { addDays, applyVars, avatarColor, fullDate, hashHue, initials, looseName, money, normalizeName, relDay, relTime, tagHue, todayStr } from '../utils/format';
 import { isAwaiting, setStatus } from '../content/conversations';
 import { fieldVars } from './ContactPanel';
-import { fieldError, h, toast, uid } from './h';
+import { fieldError, h, refocus, toast, uid } from './h';
 import { icon } from './icons';
 
 export type FunnelMode = 'board' | 'tasks' | 'report';
@@ -176,6 +176,7 @@ export function createFunnel(root: ShadowRoot, opts: FunnelOptions): Funnel {
     await clearComposer();
     await replaceTokenWithText(0, text);
     await sendComposer(false);
+    refocus(root, ta);
     window.setTimeout(refreshChat, 700);
   }
 
