@@ -77,39 +77,69 @@ export function resetConversationScroll(): void {
  * - mensagem nova do cliente numa conversa resolvida reabre a conversa.
  * Só grava quando algo muda.
  */
+/**
+ * Para conversas resolvidas: a última mensagem recebida e o total de não lidas vistos desde que foram resolvidas.
+ * Só reabre quando isso MUDA. Antes, resolver uma conversa cuja última mensagem era do cliente (ou com não lidas)
+ * fazia a verificação seguinte reabrir na hora, e o "Resolver" parecia não funcionar.
+ */
+const resolvedBaseline = new Map<string, { msg?: string; unread?: number }>();
+
 export async function trackStatus(rows: ConvRow[]): Promise<void> {
   const changes: Contact[] = [];
+  const reopen = (c: Contact) => { c.status = 'open'; c.resolvedAt = undefined; resolvedBaseline.delete(c.phone); };
   const mark = (c: Contact, since: number) => {
     if (c.awaitingSince) return;
     c.awaitingSince = since;
     c.lastMsgAt = Math.max(c.lastMsgAt ?? 0, since);
-    if (c.status === 'resolved') { c.status = 'open'; c.resolvedAt = undefined; }
     changes.push(c);
   };
+  for (const c of state.contacts) if (c.status !== 'resolved') resolvedBaseline.delete(c.phone);
 
   const chat = state.chat;
   const open = chat && state.contacts.find((c) => c.phone === chat.key || looseName(c.name) === looseName(chat.name));
   if (chat && open) {
     const last = readMessages(chat.name, 1)[0];
-    if (last && !last.out) mark(open, last.at ?? Date.now());
-    else if (last?.out && open.awaitingSince) {
+    if (last && !last.out) {
+      if (open.status === 'resolved') {
+        const sig = msgSig(last);
+        const base = resolvedBaseline.get(open.phone) ?? {};
+        // mensagem claramente posterior (horário tem só minutos) ou diferente da que havia ao resolver
+        const newer = !!last.at && !!open.resolvedAt && last.at > open.resolvedAt + 60_000;
+        if (newer || (base.msg !== undefined && base.msg !== sig)) { reopen(open); mark(open, last.at ?? Date.now()); }
+        else resolvedBaseline.set(open.phone, { ...base, msg: sig });
+      } else mark(open, last.at ?? Date.now());
+    } else if (last?.out && open.awaitingSince) {
       open.awaitingSince = undefined;
       open.lastMsgAt = last.at ?? Date.now();
       changes.push(open);
     }
   }
   for (const r of rows) {
-    if (!r.unread) continue;
     const c = findLead(r.name);
-    if (c && c !== open) mark(c, Date.now());
+    if (!c || c === open) continue;
+    if (c.status === 'resolved') {
+      const base = resolvedBaseline.get(c.phone) ?? {};
+      if (base.unread !== undefined && r.unread > base.unread) { reopen(c); mark(c, Date.now()); }
+      else resolvedBaseline.set(c.phone, { ...base, unread: r.unread });
+    } else if (r.unread) mark(c, Date.now());
   }
   for (const c of new Set(changes)) await putContact(c);
 }
 
+const msgSig = (m: { author: string; time: string; text: string }) => `${m.author}|${m.time}|${m.text}`;
+
 export async function setStatus(c: Contact, status: 'open' | 'resolved'): Promise<void> {
   c.status = status;
   c.resolvedAt = status === 'resolved' ? Date.now() : undefined;
-  if (status === 'resolved') c.awaitingSince = undefined;
+  if (status === 'resolved') {
+    c.awaitingSince = undefined;
+    // ponto de partida gravado no clique: qualquer mensagem do cliente diferente desta reabre a conversa
+    const chat = state.chat;
+    if (chat && (chat.key === c.phone || looseName(chat.name) === looseName(c.name))) {
+      const last = readMessages(chat.name, 1)[0];
+      resolvedBaseline.set(c.phone, { msg: last && !last.out ? msgSig(last) : '' });
+    }
+  } else resolvedBaseline.delete(c.phone);
   await putContact(c);
 }
 

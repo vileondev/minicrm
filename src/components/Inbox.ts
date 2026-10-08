@@ -10,7 +10,7 @@ import { queryAll } from '../utils/domSelectors';
 import { applyVars, avatarColor, fullDate, hashHue, initials, looseName, normalizeName, relTime, tagHue } from '../utils/format';
 import { contactPanel, fieldVars, leadFor } from './ContactPanel';
 import { icon } from './icons';
-import { h, toast } from './h';
+import { focusGuard, h, toast } from './h';
 
 type Tab = 'all' | 'awaiting' | 'leads' | 'resolved';
 
@@ -493,14 +493,18 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
 
   let panelSig = '';
   function renderPanel() {
-    if (panelEl.contains(root.activeElement)) { panelDirty = true; return; } // não apaga o que você está digitando
+    const guard = focusGuard(panelEl, root);
+    if (guard.blocked) { panelDirty = true; return; } // não apaga o que você está digitando
     panelDirty = false;
     const chat = pending ? null : state.chat;
     const lead = chat ? leadFor(chat).existing : undefined;
-    const sig = JSON.stringify([chat, lead, state.fields, state.stages]);
+    const sig = JSON.stringify([chat, lead, state.fields, state.stages, state.products]);
     if (sig === panelSig) return;
     panelSig = sig;
+    const scroll = panelEl.scrollTop;
     panelEl.replaceChildren(...contactPanel(root, chat));
+    panelEl.scrollTop = scroll;
+    guard.restore();
   }
 
   function renderAll() {

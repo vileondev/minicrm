@@ -166,7 +166,8 @@ export function contactPanel(root: ShadowRoot, chat: ChatContext | null): Node[]
 
   const knownTags = [...new Set(state.contacts.flatMap((c) => c.tags))].filter((t) => !contact.tags.includes(t));
   const tagIn = h('input', { id: 'cp-tag', placeholder: 'Nova tag + Enter', list: 'wacrm-tags' });
-  const addTag = () => { const v = tagIn.value.trim().replace(/,$/, ''); if (v) { contact.tags = [...new Set([...contact.tags, v])]; void save(); } };
+  // o campo é esvaziado antes de salvar: assim o painel se redesenha na hora e o foco volta para ele (próxima tag)
+  const addTag = () => { const v = tagIn.value.trim().replace(/,$/, ''); if (v) { tagIn.value = ''; contact.tags = [...new Set([...contact.tags, v])]; void save(); } };
   tagIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } });
 
   /* ---------- campos personalizados ---------- */

@@ -7,7 +7,7 @@ import { createFunnel, type FunnelMode } from './Kanban';
 import { createInbox } from './Inbox';
 import { SETTINGS_MENU, settingsContent, type SettingsSection } from './Settings';
 import { icon, type IconName } from './icons';
-import { h } from './h';
+import { focusGuard, h } from './h';
 
 type Section = 'inbox' | FunnelMode | 'settings';
 
@@ -69,6 +69,9 @@ export function mountApp(root: ShadowRoot): App {
   const settingsMenu = h('nav', { class: 'set-menu', 'aria-label': 'Ajustes' });
   const settingsBody = h('div', { class: 'set-body' });
   const settingsEl = h('div', { class: 'settings' }, h('div', { class: 'set-side' }, h('h2', {}, 'Ajustes'), settingsMenu), settingsBody);
+  let settingsDirty = false;
+  // o que ficou para depois por causa de um campo com texto aparece assim que o foco sai dele
+  settingsBody.addEventListener('focusout', () => window.setTimeout(() => { if (settingsDirty) void renderSettings(); }, 0));
 
   const main = h('main', { class: 'app-main' });
   const shell = h('div', { class: 'app hidden', role: 'application', 'aria-label': 'WA Local CRM' }, rail, main);
@@ -89,12 +92,18 @@ export function mountApp(root: ShadowRoot): App {
   async function renderSettings() {
     settingsMenu.replaceChildren(...SETTINGS_MENU.map(([id, label, ic]) => h('button', { class: 'set-item' + (settingsSection === id ? ' on' : ''), 'aria-current': settingsSection === id ? 'page' : 'false',
       on: { click: () => { settingsSection = id; void renderSettings(); } } }, icon(ic, 16), label)));
-    // não apaga um formulário que está sendo preenchido
-    if (settingsBody.contains(root.activeElement) && settingsBody.dataset.section === settingsSection) return;
+    // não apaga um formulário com texto digitado (botões e campos vazios não seguram o redesenho)
+    const guard = focusGuard(settingsBody, root);
+    const sameSection = settingsBody.dataset.section === settingsSection;
+    if (guard.blocked && sameSection) { settingsDirty = true; return; }
+    settingsDirty = false;
     settingsBody.dataset.section = settingsSection;
     const title = SETTINGS_MENU.find(([id]) => id === settingsSection)?.[1] ?? '';
+    const scroll = sameSection ? settingsBody.scrollTop : 0;
     try {
       settingsBody.replaceChildren(h('h2', {}, title), ...(await settingsContent(root, settingsSection, () => void renderSettings())));
+      settingsBody.scrollTop = scroll;
+      if (sameSection) guard.restore();
     } catch (err) {
       settingsBody.replaceChildren(h('div', { class: 'empty err' }, icon('warning'), 'Erro ao abrir esta seção.', String(err)));
     }
