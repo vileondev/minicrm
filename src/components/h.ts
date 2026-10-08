@@ -30,6 +30,24 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
 
 export const uid = () => crypto.randomUUID();
 
+const NOT_TYPING = /^(checkbox|radio|button|submit|reset|color|file|range|date)$/;
+
+/**
+ * Pode redesenhar `container` sem atrapalhar quem está digitando? Só segura o redesenho um campo de texto focado
+ * com algo escrito. Botões, caixas de marcar e campos vazios não seguram (antes qualquer foco no painel
+ * segurava, e um clique num botão só aparecia ao trocar de página). `restore` devolve o foco ao mesmo campo.
+ */
+export function focusGuard(container: HTMLElement, root: ShadowRoot): { blocked: boolean; restore: () => void } {
+  const el = root.activeElement as HTMLElement | null;
+  const none = { blocked: false, restore: () => undefined };
+  if (!el || !container.contains(el)) return none;
+  const typing = el instanceof HTMLTextAreaElement || el.isContentEditable || (el instanceof HTMLInputElement && !NOT_TYPING.test(el.type));
+  const value = (el as HTMLInputElement).value ?? el.textContent ?? '';
+  if (typing && value.trim()) return { blocked: true, restore: () => undefined };
+  const id = el.id;
+  return { blocked: false, restore: () => { if (id) container.querySelector<HTMLElement>('#' + CSS.escape(id))?.focus(); } };
+}
+
 /** Mensagem de erro de um campo: aparece abaixo dele e é lida por leitores de tela. */
 export function fieldError(): { el: HTMLElement; show(input: HTMLElement, msg: string): void; clear(input?: HTMLElement): void } {
   const el = h('p', { class: 'field-err hidden', role: 'alert' });
