@@ -113,7 +113,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
     if (msgs.length) {
-      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') }, m.text, h('span', { class: 'time' }, m.time))));
+      box.replaceChildren(...msgs.map((m) => h('div', { class: 'bubble ' + (m.out ? 'out' : 'in') }, m.quote ? h('div', { class: 'quote' }, m.quote) : null, m.text, h('span', { class: 'time' }, m.time))));
     } else if (chatError) {
       box.replaceChildren(h('div', { class: 'state err' }, icon('warning'), chatError));
     } else if (sameChat(c)) {

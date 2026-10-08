@@ -140,6 +140,7 @@ textarea { resize: vertical; min-height: 58px; }
 .bubble { max-width: 86%; padding: 6px 9px; border-radius: var(--r-ctl); font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bubble.in { align-self: flex-start; background: var(--raised); border: 1px solid var(--line); }
 .bubble.out { align-self: flex-end; background: color-mix(in srgb, var(--accent) 22%, var(--raised)); }
+.bubble .quote { border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 4px; color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bubble .time { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .qchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .skel { height: 34px; border-radius: var(--r-ctl); background: color-mix(in srgb, var(--fg) 7%, transparent); }
