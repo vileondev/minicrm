@@ -10,28 +10,28 @@ tudo rodando no seu navegador. Seus dados não saem do seu computador.
 [![Licença: GPL v3 ou posterior](https://img.shields.io/badge/licen%C3%A7a-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome%20%2F%20Edge-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Contribuições bem-vindas](https://img.shields.io/badge/contribui%C3%A7%C3%B5es-bem--vindas-brightgreen.svg)](#-como-contribuir)
+[![Contribuições bem-vindas](https://img.shields.io/badge/contribui%C3%A7%C3%B5es-bem--vindas-brightgreen.svg)](#como-contribuir)
 
 </div>
 
 ---
 
-## ✨ O que ele faz
+## O que ele faz
 
-| | |
+| Recurso | O que faz |
 |---|---|
-| 📋 **Kanban de vendas** | Arraste leads entre etapas, filtre por tag, ordene pelos mais quentes e exporte CSV. Alt+K abre. |
-| 💬 **Chat dentro do card** | Leia e responda a conversa sem sair do Kanban. Áudios, fotos e figurinhas aparecem como marcadores. |
-| ✅ **Tarefas** | Todas as tarefas de todos os leads, agrupadas em atrasadas, hoje e próximos dias. |
-| 📊 **Relatório do funil** | Quantos leads passaram por cada etapa, conversão, tempo médio e valor ponderado. |
-| 🏷️ **Etiquetas na lista** | A etapa e as tags aparecem ao lado do nome de cada conversa. |
-| ⚡ **Respostas rápidas** | Digite `/` no chat. Aceita `{nome}`, `{primeiro_nome}`, `{saudacao}` e `{data}`. |
-| 🔁 **Automações locais** | "Lead parado 3 dias → criar follow-up", "cliente pediu preço → mover etapa". Nenhuma automação envia mensagem. |
-| 🤖 **Assistente de IA (opcional)** | Com a sua chave da Anthropic, OpenAI ou Google Gemini: temperatura do lead, resumo, próximo passo e rascunho de resposta. Você revisa e envia. |
-| 👥 **Grupos e internos** | Grupos ficam fora do funil por padrão; contatos da equipe podem ser marcados como internos. |
-| 💾 **Backup** | Exporte e importe tudo em JSON. |
+| **Kanban de vendas** | Arraste leads entre etapas, filtre por tag, ordene pelos mais quentes e exporte CSV. Alt+K abre. |
+| **Chat dentro do card** | Leia e responda a conversa sem sair do Kanban. Áudios, fotos e figurinhas aparecem como marcadores. |
+| **Tarefas** | Todas as tarefas de todos os leads, agrupadas em atrasadas, hoje e próximos dias. |
+| **Relatório do funil** | Quantos leads passaram por cada etapa, conversão, tempo médio e valor ponderado. |
+| **Etiquetas na lista** | A etapa e as tags aparecem ao lado do nome de cada conversa. |
+| **Respostas rápidas** | Digite `/` no chat. Aceita `{nome}`, `{primeiro_nome}`, `{saudacao}` e `{data}`. |
+| **Automações locais** | "Lead parado 3 dias → criar follow-up", "cliente pediu preço → mover etapa". Nenhuma automação envia mensagem. |
+| **Assistente de IA (opcional)** | Com a sua chave da Anthropic, OpenAI ou Google Gemini: temperatura do lead, resumo, próximo passo e rascunho de resposta. Você revisa e envia. |
+| **Grupos e internos** | Grupos ficam fora do funil por padrão; contatos da equipe podem ser marcados como internos. |
+| **Backup** | Exporte e importe tudo em JSON. |
 
-## 🔒 Privacidade
+## Privacidade
 
 Tudo fica **no seu navegador** (`chrome.storage.local` e IndexedDB). Não existe servidor, conta ou telemetria.
 
@@ -41,7 +41,37 @@ não entra no backup.
 
 ---
 
-## 📥 Como baixar e instalar
+## Como funciona
+
+A extensão lê a página do WhatsApp Web, guarda o CRM no próprio navegador e desenha a interface por cima,
+isolada num Shadow DOM. Só o assistente de IA, quando ligado, faz chamadas externas, e elas saem do service worker
+direto para o provedor que você escolheu.
+
+```mermaid
+flowchart LR
+    WA["WhatsApp Web<br/>(lista, conversa, mensagens)"]
+
+    subgraph EXT["Extensão (no seu navegador)"]
+        direction TB
+        CS["Content script<br/>observer, leitura de mensagens,<br/>fluxos de automação"]
+        UI["Interface em Shadow DOM<br/>Kanban, tarefas, relatório, painel"]
+        DB[("IndexedDB<br/>contatos, tarefas, notas")]
+        ST[("chrome.storage<br/>etapas, respostas, fluxos")]
+        SW["Service worker<br/>(só para a IA)"]
+    end
+
+    AI["API de IA<br/>Anthropic, OpenAI ou Gemini"]
+
+    WA -- "lê o DOM" --> CS
+    CS -- "abre conversas e<br/>insere rascunhos" --> WA
+    CS <--> UI
+    CS <--> DB
+    CS <--> ST
+    CS -. "opcional, com a sua chave" .-> SW
+    SW -. "HTTPS" .-> AI
+```
+
+## Como baixar e instalar
 
 A extensão ainda não está na Chrome Web Store, então a instalação é pelo modo do desenvolvedor. Leva uns 5 minutos.
 
@@ -78,7 +108,7 @@ Isso cria a pasta **`dist`**, que é a extensão pronta.
 3. Clique em **Carregar sem pacote** e escolha a pasta **`dist`**.
 4. Abra (ou recarregue) [web.whatsapp.com](https://web.whatsapp.com).
 
-Pronto: os botões do CRM aparecem na lateral esquerda do WhatsApp. 🎉
+Pronto: os botões do CRM aparecem na lateral esquerda do WhatsApp.
 
 ### Atualizar para uma versão nova
 
@@ -88,16 +118,16 @@ npm install
 npm run build
 ```
 
-Depois clique no ↻ da extensão em `chrome://extensions` e dê F5 no WhatsApp. Seus dados continuam lá.
+Depois clique em recarregar no card da extensão em `chrome://extensions` e dê F5 no WhatsApp. Seus dados continuam lá.
 Se você baixou o ZIP, baixe de novo e repita os passos 3 e 4.
 
 ---
 
-## 🚀 Primeiros passos
+## Primeiros passos
 
-1. **Abra o Kanban** com o botão ▦ ou **Alt+K**.
+1. **Abra o Kanban** com o primeiro botão da lateral do WhatsApp ou **Alt+K**.
 2. Clique em **Chat atual** para pôr a conversa aberta no funil, ou em **Importar** para trazer as conversas visíveis na lista.
-3. **Abra o painel do contato** com o botão ☰ ou **Alt+P** para definir etapa, valor, tags, tarefas e notas.
+3. **Abra o painel do contato** com o segundo botão da lateral ou **Alt+P** para definir etapa, valor, tags, tarefas e notas.
 4. Em **Respostas** (no painel), crie seus atalhos e use-os digitando `/` no chat.
 5. Quer IA? No painel, vá em **IA**, ligue o assistente, escolha o provedor e cole a sua chave.
 
@@ -120,7 +150,7 @@ O uso é cobrado pelo provedor, na sua conta.
 
 ---
 
-## 🛠️ Problemas comuns
+## Problemas comuns
 
 **O CRM não aparece no WhatsApp:** confira se a extensão está ativada em `chrome://extensions` e dê F5 no WhatsApp.
 
@@ -132,7 +162,7 @@ manualmente e ligue o lead a ela. No painel do contato, **Ler do perfil** vincul
 
 ---
 
-## 🤝 Como contribuir
+## Como contribuir
 
 Contribuições são muito bem-vindas: correções, novos recursos, traduções, melhorias de texto.
 
@@ -153,13 +183,13 @@ Contribuições são muito bem-vindas: correções, novos recursos, traduções,
 
 ---
 
-## ⚠️ Aviso
+## Aviso
 
 Este projeto não tem relação com o WhatsApp nem com a Meta. Ele depende da estrutura do WhatsApp Web, que muda sem aviso.
 Use com bom senso: automações de envio em massa podem violar os termos de uso do WhatsApp. Por isso, nenhuma automação
 desta extensão envia mensagens sozinha.
 
-## 📄 Licença
+## Licença
 
 Copyright © 2026 Victor Leon
 
