@@ -10,7 +10,7 @@ import { queryAll } from '../utils/domSelectors';
 import { applyVars, avatarColor, fullDate, hashHue, initials, looseName, normalizeName, relTime, tagHue } from '../utils/format';
 import { contactPanel, fieldVars, leadFor } from './ContactPanel';
 import { icon } from './icons';
-import { focusGuard, h, toast } from './h';
+import { focusGuard, h, refocus, toast } from './h';
 
 type Tab = 'all' | 'awaiting' | 'leads' | 'resolved';
 
@@ -395,9 +395,22 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
     ta.value = '';
     drafts.delete(chat.key);
     closeQuickReplies();
+    // se você clicar em outra coisa do CRM enquanto envia, o foco volta para lá, não para o campo
+    let chosen: HTMLElement | null = null;
+    const watch = (e: Event) => {
+      const t = e.composedPath()[0];
+      const target = t instanceof HTMLElement ? t.closest<HTMLElement>('input, textarea, select, button, [contenteditable="true"], [tabindex]') : null;
+      if (target && target !== ta && el.contains(target)) chosen = target;
+    };
+    // clique (mouse ou toque) e foco pelo teclado
+    el.addEventListener('pointerdown', watch);
+    el.addEventListener('focusin', watch);
     await clearComposer();
     await replaceTokenWithText(0, text);
     await sendComposer(false);
+    el.removeEventListener('pointerdown', watch);
+    el.removeEventListener('focusin', watch);
+    refocus(root, chosen ?? ta); // pronto para digitar a próxima sem clicar no campo
     window.setTimeout(() => renderMessages(), 700);
   }
 
@@ -420,6 +433,7 @@ export function createInbox(root: ShadowRoot, opts: { isVisible(): boolean; show
       drafts.delete(key);
       window.setTimeout(() => renderMessages(), 700);
     } else renderTray();
+    if (result === 'sent') refocus(root, ta);
     if (result === 'sent') toast(root, textApart ? 'Foto enviada. O texto foi logo em seguida, como mensagem.' : 'Foto enviada.');
     else if (result === 'not-confirmed') { toast(root, 'Confira no WhatsApp original se a foto saiu.'); opts.showWhatsApp(); }
     else if (result === 'no-editor') { toast(root, 'O WhatsApp não abriu o editor de foto. Abri o WhatsApp original para você enviar por lá.'); opts.showWhatsApp(); }

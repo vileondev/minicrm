@@ -58,6 +58,18 @@ export function fieldError(): { el: HTMLElement; show(input: HTMLElement, msg: s
   };
 }
 
+/**
+ * Devolve o foco ao campo de mensagem do CRM depois de enviar. Para enviar, o texto passa pelo campo do WhatsApp
+ * (escondido), que fica com o foco, e o WhatsApp ainda o puxa de volta logo depois do envio: por isso a segunda
+ * tentativa. Ela só age se o foco saiu do CRM; se você clicou em outra coisa do CRM, fica onde você clicou.
+ */
+export function refocus(root: ShadowRoot, el: HTMLElement): void {
+  el.focus();
+  for (const ms of [150, 450]) {
+    window.setTimeout(() => { if (el.isConnected && document.activeElement !== root.host) el.focus(); }, ms);
+  }
+}
+
 export function toast(root: ShadowRoot, msg: string): void {
   const t = h('div', { class: 'msg' }, msg);
   root.append(t);
