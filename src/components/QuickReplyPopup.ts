@@ -3,7 +3,7 @@ import { getQuickReplies } from '../storage/chromeStore';
 import { getComposer, getComposerText, replaceTokenWithText } from '../utils/domHelpers';
 import { applyVars } from '../utils/format';
 import { state } from '../content/state';
-import { h } from './h';
+import { h, toast } from './h';
 import { icon } from './icons';
 
 const TOKEN = /(?:^|\s)(\/[^\s/]*)$/; // "/atalho" no fim do texto, no começo ou após espaço
@@ -87,19 +87,27 @@ export function mountQuickReplyPopup(root: ShadowRoot): void {
   }, true);
 }
 
-/** Aviso de sugestão disparado por regras If/Then. */
-export function mountSuggestionToast(root: ShadowRoot): (qr: QuickReply) => void {
+/**
+ * Aviso com sugestão de resposta (fluxos e IA). Nunca envia: "Inserir" só coloca o texto no campo de mensagem,
+ * e só se a conversa do contato (`forKey`) for a que está aberta.
+ */
+export function mountSuggestionToast(root: ShadowRoot): (item: { title: string; text: string }, forKey?: string) => void {
   const el = h('div', { class: 'toast hidden' });
   root.append(el);
   let timer: number | undefined;
-  return (qr) => {
+  return (item, forKey) => {
+    const who = forKey ? state.contacts.find((c) => c.phone === forKey)?.name : undefined;
     el.replaceChildren(
-      h('span', {}, 'Sugestão de resposta: ' + qr.title),
-      h('button', { class: 'btn', on: { click: () => { el.classList.add('hidden'); void replaceTokenWithText(0, applyVars(qr.text, state.chat)); } } }, 'Inserir'),
-      h('button', { class: 'x', on: { click: () => el.classList.add('hidden') } }, icon('x', 12)),
+      h('span', {}, `Sugestão${who ? ' para ' + who : ''}: ${item.title}`),
+      h('button', { class: 'btn', on: { click: () => {
+        if (forKey && state.chat?.key !== forKey) return toast(root, `Abra a conversa de ${who ?? 'este contato'} para inserir a resposta.`);
+        el.classList.add('hidden');
+        void replaceTokenWithText(0, applyVars(item.text, state.chat));
+      } } }, 'Inserir'),
+      h('button', { class: 'x', title: 'Dispensar', 'aria-label': 'Dispensar', on: { click: () => el.classList.add('hidden') } }, icon('x', 12)),
     );
     el.classList.remove('hidden');
     window.clearTimeout(timer);
-    timer = window.setTimeout(() => el.classList.add('hidden'), 15000);
+    timer = window.setTimeout(() => el.classList.add('hidden'), 20000);
   };
 }

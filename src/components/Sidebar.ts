@@ -1,15 +1,17 @@
-import type { Contact, QuickReply, Rule } from '../types';
-import { getQuickReplies, getRules, saveQuickReplies, saveRules } from '../storage/chromeStore';
+import type { Contact } from '../types';
+import { getQuickReplies, saveQuickReplies } from '../storage/chromeStore';
 import { blankContact, deleteContact, putContact } from '../storage/db';
 import { exportBackup, importBackup } from '../storage/backup';
 import { collectDiagnostics } from '../content/diagnostics';
 import { state } from '../content/state';
 import { replaceTokenWithText } from '../utils/domHelpers';
 import { applyVars, avatarColor, initials, tagHue, todayStr } from '../utils/format';
+import { aiView } from './AiPanel';
+import { flowsView } from './Flows';
 import { icon } from './icons';
 import { h, toast, uid } from './h';
 
-type Tab = 'contact' | 'replies' | 'data';
+type Tab = 'contact' | 'ai' | 'flows' | 'replies' | 'data';
 
 export interface Panel {
   toggle(): void;
@@ -36,14 +38,14 @@ export function mountPanel(root: ShadowRoot): Panel {
         h('span', { class: 'muted' }, !chat ? 'Abra uma conversa' : chat.isGroup ? 'Grupo' : chat.number ? '+' + chat.number : chat.byName ? 'Identificado pelo nome' : 'Número oculto pelo WhatsApp')),
       h('button', { class: 'x', title: 'Fechar', on: { click: () => api.toggle() } }, icon('x', 12)));
     tabsEl.replaceChildren(
-      ...([['contact', 'Contato'], ['replies', 'Respostas'], ['data', 'Dados']] as const).map(([id, label]) =>
+      ...([['contact', 'Contato'], ['ai', 'IA'], ['flows', 'Fluxos'], ['replies', 'Respostas'], ['data', 'Dados']] as const).map(([id, label]) =>
         h('button', { class: 'tab' + (tab === id ? ' active' : ''), on: { click: () => { tab = id; refresh(); } } }, label)));
     void renderBody();
   }
 
   async function renderBody() {
     try {
-      const content = tab === 'contact' ? contactView() : tab === 'replies' ? await repliesView() : dataView();
+      const content = tab === 'contact' ? contactView() : tab === 'ai' ? aiView(root, refresh) : tab === 'flows' ? flowsView(root, refresh) : tab === 'replies' ? await repliesView() : dataView();
       body.replaceChildren(...content);
     } catch (err) {
       console.error('[WA CRM] erro ao renderizar painel', err);
@@ -113,12 +115,10 @@ export function mountPanel(root: ShadowRoot): Panel {
   }
 
   async function repliesView(): Promise<Node[]> {
-    const [replies, rules] = await Promise.all([getQuickReplies(), getRules()]);
+    const replies = await getQuickReplies();
     const sc = h('input', { id: 'qr-sc', placeholder: 'preco' });
     const ti = h('input', { id: 'qr-ti', placeholder: 'Preços' });
     const tx = h('textarea', { id: 'qr-tx', placeholder: 'Olá {primeiro_nome}, segue a tabela de valores.' });
-    const kw = h('input', { id: 'rl-kw', placeholder: 'preço' });
-    const qrSel = h('select', { id: 'rl-qr' }, ...replies.map((r: QuickReply) => h('option', { value: r.id }, r.title)));
     const lab = (id: string, text: string) => h('label', { class: 'field', for: id }, text);
 
     return [
@@ -136,16 +136,6 @@ export function mountPanel(root: ShadowRoot): Panel {
           await saveQuickReplies([...replies, { id: uid(), shortcut: s, title: ti.value.trim() || s, text: tx.value }]);
           refresh();
         } } }, 'Salvar resposta')),
-      h('div', { class: 'sec' }, h('h4', {}, 'Regras de sugestão'),
-        ...rules.map((r: Rule) => h('div', { class: 'row' }, h('span', {}, `Se contém "${r.keyword}", sugere ${replies.find((q) => q.id === r.quickReplyId)?.title ?? 'resposta removida'}`),
-          h('button', { class: 'x', on: { click: () => void saveRules(rules.filter((x) => x.id !== r.id)).then(refresh) } }, icon('x', 12)))),
-        h('div', { style: 'margin-top:8px' }, lab('rl-kw', 'Quando a mensagem recebida contém'), kw, lab('rl-qr', 'Sugerir a resposta'), qrSel,
-          h('button', { class: 'btn', on: { click: async () => {
-            const k = kw.value.trim();
-            if (!k || !qrSel.value) return toast(root, 'Informe a palavra-chave e a resposta.');
-            await saveRules([...rules, { id: uid(), keyword: k, quickReplyId: qrSel.value, enabled: true }]);
-            refresh();
-          } } }, 'Adicionar regra'))),
     ];
   }
 

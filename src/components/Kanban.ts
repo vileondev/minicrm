@@ -3,6 +3,7 @@ import { saveStages } from '../storage/chromeStore';
 import { blankContact, deleteContact, getOrCreateContact, putContact } from '../storage/db';
 import { emitDataChange } from '../storage/bus';
 import { openChatByName, visibleChatNames } from '../content/chatList';
+import { analyzeChat } from '../content/ai';
 import { readMessages, waitForChat } from '../content/messages';
 import { state } from '../content/state';
 import { clearComposer, replaceTokenWithText, sendComposer } from '../utils/domHelpers';
@@ -17,6 +18,7 @@ export interface Kanban {
   refreshChat(): void;
 }
 
+const HEAT_LABEL = { quente: 'Quente', morno: 'Morno', frio: 'Frio' } as const;
 const lateTasks = (c: Contact) => c.tasks.filter((t) => !t.done && t.due && t.due < todayStr()).length;
 const openTasks = (c: Contact) => c.tasks.filter((t) => !t.done).length;
 
@@ -29,6 +31,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
   let query = '';
   let tagFilter = '';
   let editing: string | null = null;
+  let sortBy: 'recent' | 'score' | 'value' = 'recent';
   let split = false;
   let ratio = 0.55; // fração da tela para o WhatsApp no modo dividido
   let savedStyle: string | null | undefined;
@@ -155,6 +158,18 @@ export function mountKanban(root: ShadowRoot): Kanban {
     window.setTimeout(refreshChat, 700);
   }
 
+  async function analyzeFromCard(c: Contact, ta: HTMLTextAreaElement) {
+    if (!state.chat || !sameChat(c)) return toast(root, 'Abra o chat deste card antes de analisar.');
+    toast(root, 'Analisando a conversa…');
+    try {
+      const r = await analyzeChat(state.chat);
+      if (r.analysis.draft && !ta.value.trim()) { ta.value = r.analysis.draft; drafts.set(c.phone, ta.value); }
+      toast(root, `Lead ${r.analysis.heat} (${r.analysis.score}). CRM atualizado.`);
+    } catch (err) {
+      toast(root, err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function chatBox(c: Contact): HTMLElement {
     const msgs = h('div', { class: 'msgs' });
     const ta = h('textarea', { rows: 2, 'aria-label': 'Mensagem para ' + c.name, placeholder: 'Escreva uma mensagem. Enter envia, Shift+Enter quebra a linha.' });
@@ -174,6 +189,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
     const box = h('div', { class: 'cardchat', on: { click: (e) => e.stopPropagation() } }, msgs, chips, ta,
       h('div', { class: 'inline' },
         h('button', { class: 'btn', on: { click: () => void sendFromCard(c, ta) } }, icon('send'), 'Enviar'),
+        h('button', { class: 'btn ghost', title: 'A IA atualiza o CRM e sugere um rascunho de resposta (você envia)', on: { click: () => void analyzeFromCard(c, ta) } }, icon('sparkle'), 'Analisar'),
         h('button', { class: 'btn ghost', title: 'Abre o WhatsApp completo ao lado', on: { click: () => void open(c) } }, icon('open-out'), 'WhatsApp')));
     queueMicrotask(() => fillMsgs(msgs, c));
     return box;
@@ -196,7 +212,9 @@ export function mountKanban(root: ShadowRoot): Kanban {
         iconBtn('chat', expanded ? 'Fechar conversa' : 'Conversar', (e) => { e.stopPropagation(); void toggleChat(c); }),
         iconBtn('trash', 'Excluir lead', (e) => { e.stopPropagation(); if (confirm(`Excluir "${c.name}" do CRM?`)) void deleteContact(c.phone); }, 'x danger')),
       expanded ? chatBox(c) : null,
-      c.tags.length ? h('div', { class: 'chips' }, ...c.tags.map((t) => h('span', { class: 'chip', style: `--h:${tagHue(t)}` }, t))) : null,
+      c.heat || c.tags.length ? h('div', { class: 'chips' },
+        c.heat ? h('span', { class: 'heat ' + c.heat }, `${HEAT_LABEL[c.heat]}${c.score !== undefined ? ' ' + c.score : ''}`) : null,
+        ...c.tags.map((t) => h('span', { class: 'chip', style: `--h:${tagHue(t)}` }, t))) : null,
       c.notes[0] ? h('div', { class: 'snippet' }, c.notes[0].text) : null,
       h('div', { class: 'meta' },
         c.value ? h('span', {}, icon('coins', 14), money(c.value)) : null,
@@ -235,7 +253,7 @@ export function mountKanban(root: ShadowRoot): Kanban {
         h('button', { class: 'btn ghost sm', on: { click: () => void removeStage(stage) } }, icon('trash', 14), 'Excluir etapa')));
     }
 
-    const body = h('div', { class: 'col-body' }, ...mine.sort((a, b) => b.updatedAt - a.updatedAt).map(card));
+    const body = h('div', { class: 'col-body' }, ...mine.sort((a, b) => (sortBy === 'score' ? (b.score ?? -1) - (a.score ?? -1) : sortBy === 'value' ? b.value - a.value : 0) || b.updatedAt - a.updatedAt).map(card));
     if (!mine.length) {
       body.append(h('div', { class: 'empty' }, icon('arrows-in'), stage ? 'Nenhum lead nesta etapa.' : 'Nenhum lead sem etapa.', stage ? 'Arraste um card para cá.' : null));
     }
@@ -305,6 +323,10 @@ export function mountKanban(root: ShadowRoot): Kanban {
         h('span', { class: 'kb-spacer' }),
         h('div', { class: 'search' }, icon('search'), search),
         tagSel,
+        h('select', { 'aria-label': 'Ordenar cards', on: { change: (e) => { sortBy = (e.target as HTMLSelectElement).value as typeof sortBy; render(); } } },
+          h('option', { value: 'recent', selected: sortBy === 'recent' }, 'Mais recentes'),
+          h('option', { value: 'score', selected: sortBy === 'score' }, 'Mais quentes'),
+          h('option', { value: 'value', selected: sortBy === 'value' }, 'Maior valor')),
         h('button', { class: 'btn ghost', title: 'Adiciona o chat aberto ao funil', on: { click: async () => { if (state.chat) { await getOrCreateContact(state.chat); toast(root, 'Chat adicionado ao funil.'); } else toast(root, 'Abra uma conversa primeiro.'); } } }, icon('plus'), 'Chat atual'),
         h('button', { class: 'btn ghost', title: 'Cria leads com as conversas visíveis na lista', on: { click: () => void importVisible() } }, icon('users'), 'Importar'),
         h('button', { class: 'btn ghost', on: { click: exportCsv } }, icon('download'), 'CSV'),

@@ -68,13 +68,13 @@ textarea { resize: vertical; min-height: 58px; }
 .dock .badge { position: absolute; top: -5px; right: -5px; background: var(--danger); color: var(--canvas); font-size: 10px; font-weight: 700; border-radius: var(--r-pill); padding: 1px 5px; min-width: 16px; text-align: center; }
 
 /* ---------- painel do contato ---------- */
-.panel { position: fixed; right: 0; top: 60px; bottom: 0; width: 360px; max-width: 100vw; z-index: 99980; background: var(--surface); color: var(--fg);
+.panel { position: fixed; right: 0; top: 60px; bottom: 0; width: 380px; max-width: 100vw; z-index: 99980; background: var(--surface); color: var(--fg);
   border-left: 1px solid var(--line); display: flex; flex-direction: column; box-shadow: var(--shadow); font-size: 13px; }
 .phead { padding: 14px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); }
 .phead .grow { flex: 1; min-width: 0; }
 .phead b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tabs { display: flex; gap: 4px; padding: 8px 10px 0; border-bottom: 1px solid var(--line); }
-.tab { padding: 8px 12px; border: 0; background: none; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab { padding: 8px 9px; border: 0; background: none; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover { color: var(--fg); }
 .tab.active { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
 .body { flex: 1; overflow-y: auto; padding: 14px; }
@@ -133,6 +133,21 @@ textarea { resize: vertical; min-height: 58px; }
 .card .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .card .meta .ic { width: 14px; height: 14px; }
 .card .meta .late { color: var(--danger); font-weight: 600; }
+
+/* ---------- temperatura do lead, fluxos e assistente ---------- */
+.heat { display: inline-flex; align-items: center; border-radius: var(--r-pill); padding: 2px 9px; margin: 0 4px 4px 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.heat.quente { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--raised)); }
+.heat.morno { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--raised)); }
+.heat.frio { color: var(--muted); background: color-mix(in srgb, var(--fg) 8%, var(--raised)); }
+.flow { border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 10px; margin-bottom: 8px; background: var(--raised); }
+.flow .muted { line-height: 1.45; }
+.step { border-left: 2px solid var(--line); padding-left: 12px; margin: 12px 0; }
+.step > b { display: block; margin-bottom: 6px; }
+.ai-result { background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-box); padding: 12px; }
+.ai-result p { margin: 8px 0; line-height: 1.45; }
+label.check { display: flex; align-items: center; font-size: 13px; margin-bottom: 8px; cursor: pointer; }
+details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; filter: none; transform: none; }
 
 /* ---------- chat dentro do card ---------- */
 .cardchat { margin-top: 10px; }

@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist/fonts', { recursive: true });
 await build({
-  entryPoints: { content: 'src/content/index.ts' },
+  entryPoints: { content: 'src/content/index.ts', background: 'src/background.ts' },
   bundle: true,
   outdir: 'dist',
   format: 'iife',

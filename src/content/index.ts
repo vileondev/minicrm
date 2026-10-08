@@ -1,23 +1,26 @@
 import { mountKanban } from '../components/Kanban';
 import { mountPanel } from '../components/Sidebar';
 import { mountQuickReplyPopup, mountSuggestionToast } from '../components/QuickReplyPopup';
-import { h } from '../components/h';
+import { h, toast } from '../components/h';
 import { icon } from '../components/icons';
-import { loadFonts } from './fonts';
-import { getQuickReplies, getRules } from '../storage/chromeStore';
 import { todayStr } from '../utils/format';
+import { scheduleAutoAnalysis } from './ai';
+import { checkStale, initAutomation, onDataChanged, onIncomingMessage } from './automation';
 import { refreshBadges } from './chatList';
+import { loadFonts } from './fonts';
 import { mountShadowRoot } from './injector';
 import { startObserver } from './observer';
 import { reloadState, state, watchState } from './state';
 
 async function init() {
   await Promise.all([reloadState(), loadFonts()]);
+  await onDataChanged(); // primeiro snapshot: não dispara fluxos para o que já existia
   const root = mountShadowRoot();
   const kanban = mountKanban(root);
   const panel = mountPanel(root);
   mountQuickReplyPopup(root);
   const suggest = mountSuggestionToast(root);
+  initAutomation({ suggest, notify: (msg) => toast(root, msg) });
 
   // dock: botões na lateral esquerda do WhatsApp
   const badge = h('span', { class: 'badge hidden' });
@@ -31,11 +34,13 @@ async function init() {
     badge.classList.toggle('hidden', late === 0);
   };
 
-  watchState(() => {
+  watchState(async () => {
+    await onDataChanged(); // fluxos "entra na etapa" e "tag adicionada"
     refreshBadges();
     updateBadge();
     panel.refresh();
     kanban.refresh();
+    void checkStale();
   });
 
   document.addEventListener('keydown', (e) => {
@@ -48,12 +53,12 @@ async function init() {
   startObserver({
     onChatChange: (ctx) => { state.chat = ctx; panel.refresh(); kanban.refresh(); },
     onTick: () => { refreshBadges(); kanban.refreshChat(); },
-    onIncoming: async (text) => {
-      const lower = text.toLowerCase();
-      const [rules, replies] = await Promise.all([getRules(), getQuickReplies()]);
-      const rule = rules.find((r) => r.enabled && lower.includes(r.keyword.toLowerCase()));
-      const qr = rule && replies.find((q) => q.id === rule.quickReplyId);
-      if (qr) suggest(qr); // só sugere; o usuário decide inserir
+    onIncoming: (text, chat) => {
+      void onIncomingMessage(text, chat);
+      // IA opcional: analisa sozinha só se o usuário ligou; o rascunho é apenas sugerido
+      scheduleAutoAnalysis(chat, (r) => {
+        if (r.analysis.draft) suggest({ title: 'Rascunho da IA', text: r.analysis.draft }, chat.key);
+      });
     },
   });
 }

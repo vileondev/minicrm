@@ -16,6 +16,8 @@ export const money = (n: number) => n.toLocaleString('pt-BR', { style: 'currency
 
 export const todayStr = (): string => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD local
 
+export const addDays = (n: number): string => new Date(Date.now() + n * 86400000).toLocaleDateString('sv-SE');
+
 export function greeting(): string {
   const hr = new Date().getHours();
   return hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';

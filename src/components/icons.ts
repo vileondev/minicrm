@@ -15,6 +15,7 @@ import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glas
 import paperPlaneTilt from '@phosphor-icons/core/assets/regular/paper-plane-tilt.svg';
 import plus from '@phosphor-icons/core/assets/regular/plus.svg';
 import sidebarSimple from '@phosphor-icons/core/assets/regular/sidebar-simple.svg';
+import sparkle from '@phosphor-icons/core/assets/regular/sparkle.svg';
 import trash from '@phosphor-icons/core/assets/regular/trash.svg';
 import usersThree from '@phosphor-icons/core/assets/regular/users-three.svg';
 import warning from '@phosphor-icons/core/assets/regular/warning.svg';
@@ -39,6 +40,7 @@ const ICONS = {
   send: paperPlaneTilt,
   plus,
   panel: sidebarSimple,
+  sparkle,
   trash,
   users: usersThree,
   warning,
