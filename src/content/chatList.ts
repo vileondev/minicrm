@@ -1,12 +1,13 @@
 import type { Contact, Stage } from '../types';
 import { queryAll } from '../utils/domSelectors';
-import { sleep, typeInSearch } from '../utils/domHelpers';
+import { clearSearch, sleep, typeInSearch } from '../utils/domHelpers';
 import { normalizeName, tagColor } from '../utils/format';
 import { state } from './state';
 
 const BADGE_ATTR = 'data-wacrm-badges';
 
-const rowTitle = (row: HTMLElement) => row.querySelector<HTMLElement>('span[title]');
+// o nome da conversa vem antes da prévia da última mensagem; prefere o span[title][dir=auto], que é o do nome
+const rowTitle = (row: HTMLElement) => row.querySelector<HTMLElement>('span[title][dir="auto"]') ?? row.querySelector<HTMLElement>('span[title]');
 const rowName = (row: HTMLElement) => rowTitle(row)?.getAttribute('title')?.trim() ?? '';
 
 export function visibleChatNames(): string[] {
@@ -62,22 +63,48 @@ export function refreshBadges(): void {
   }
 }
 
+/** Só letras e dígitos: "Lucas 🚀" e "lucas" batem. */
+const loose = (s: string) => normalizeName(s).replace(/[^\p{L}\p{N}]+/gu, '');
+
 function findRow(name: string): HTMLElement | undefined {
-  const target = normalizeName(name);
-  return queryAll('chatListRows').find((r) => normalizeName(rowName(r)) === target);
+  const rows = queryAll('chatListRows');
+  const exact = normalizeName(name);
+  const lo = loose(name);
+  return rows.find((r) => normalizeName(rowName(r)) === exact) ?? (lo ? rows.find((r) => loose(rowName(r)) === lo) : undefined);
 }
 
-/** Abre a conversa clicando na linha da lista; se não estiver visível, pesquisa pelo nome. */
-export async function openChatByName(name: string): Promise<boolean> {
-  let row = findRow(name);
-  if (!row && (await typeInSearch(name))) {
-    for (let i = 0; i < 6 && !row; i++) {
-      await sleep(400);
-      row = findRow(name);
-    }
+/** Na busca por número o título é o nome salvo: aceita a linha que mostra os últimos dígitos ou o único resultado. */
+function findRowByPhone(digits: string): HTMLElement | undefined {
+  const rows = queryAll('chatListRows');
+  const tail = digits.slice(-8);
+  return rows.find((r) => (r.textContent ?? '').replace(/\D/g, '').includes(tail)) ?? (rows.length === 1 ? rows[0] : undefined);
+}
+
+async function searchAndFind(text: string, find: () => HTMLElement | undefined): Promise<HTMLElement | undefined> {
+  if (!(await typeInSearch(text))) return undefined;
+  for (let i = 0; i < 8; i++) {
+    await sleep(350);
+    const row = find();
+    if (row) return row;
   }
-  const el = row && rowTitle(row);
-  if (!el) return false;
-  el.click();
-  return true;
+  return undefined;
+}
+
+/**
+ * Abre a conversa clicando na linha da lista. Se ela não estiver visível, pesquisa pelo nome e, para contatos
+ * com telefone, pelo número. Limpa a pesquisa depois para a lista voltar ao normal.
+ */
+export async function openChat(name: string, key?: string): Promise<boolean> {
+  let row = findRow(name);
+  let searched = false;
+  if (!row) {
+    searched = true;
+    row = await searchAndFind(name, () => findRow(name));
+  }
+  const digits = key && /^\d{8,}$/.test(key) ? key : null;
+  if (!row && digits) row = await searchAndFind(digits, () => findRowByPhone(digits));
+  const el = row && (rowTitle(row) ?? row);
+  if (el) el.click();
+  if (searched) window.setTimeout(() => void clearSearch(), 600);
+  return !!el;
 }

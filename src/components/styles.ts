@@ -156,6 +156,7 @@ details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 .bubble.in { align-self: flex-start; background: var(--raised); border: 1px solid var(--line); }
 .bubble.out { align-self: flex-end; background: color-mix(in srgb, var(--accent) 22%, var(--raised)); }
 .bubble .quote { border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 4px; color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bubble .author { font-size: 11px; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
 .bubble .time { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .qchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .skel { height: 34px; border-radius: var(--r-ctl); background: color-mix(in srgb, var(--fg) 7%, transparent); }
@@ -166,6 +167,33 @@ details.sec summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 }
 .state { display: flex; align-items: center; gap: 8px; padding: 10px; font-size: 12px; color: var(--muted); }
 .state.err { color: var(--danger); }
+.inline.wrap { flex-wrap: wrap; }
+.bubble.media { font-style: italic; color: var(--muted); }
+
+/* ---------- visões do Kanban: tarefas e relatório ---------- */
+.seg { display: inline-flex; gap: 4px; }
+.kb-page { flex: 1; overflow-y: auto; padding: 18px 20px; max-width: 1000px; width: 100%; }
+.tgroup { margin-bottom: 18px; }
+.tgroup h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tgroup h3 .count { background: color-mix(in srgb, var(--fg) 8%, transparent); border-radius: var(--r-pill); padding: 0 8px; font-size: 11px; }
+.trow { display: flex; align-items: center; gap: 10px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 8px 10px; margin-bottom: 6px; }
+.trow input[type=checkbox] { margin: 0; }
+.trow .avatar { width: 26px; height: 26px; font-size: 11px; }
+.trow .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.trow .grow b { font-weight: 500; overflow-wrap: anywhere; }
+.trow .grow .muted { font-size: 12px; }
+.trow .due { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trow.late { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.trow.late .due { color: var(--danger); font-weight: 600; }
+.rep { width: 100%; border-collapse: collapse; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
+.rep th, .rep td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rep th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--surface); }
+.rep td.num, .rep th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rep tr:last-child td { border-bottom: 0; }
+.rep .bar { height: 4px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--fg) 7%, transparent); margin-top: 6px; overflow: hidden; }
+.rep .bar span { display: block; height: 100%; border-radius: inherit; }
+.kb-page > .muted { margin-top: 12px; line-height: 1.5; }
+.state.err > span { display: flex; flex-direction: column; align-items: flex-start; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 /* ---------- popup "/" e avisos ---------- */

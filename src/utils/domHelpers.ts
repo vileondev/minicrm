@@ -104,13 +104,35 @@ export async function sendComposer(humanDelay = true): Promise<boolean> {
   return true;
 }
 
+/** Preenche um <input> controlado pelo React: o setter do protótipo faz o React enxergar a mudança. */
+function setInputValue(input: HTMLInputElement, text: string): void {
+  input.focus();
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 /** Digita no campo de busca da lista de conversas (para abrir um contato que não está visível). */
 export async function typeInSearch(text: string): Promise<boolean> {
   const box = queryFirst('searchBox');
   if (!box) return false;
+  // versões novas do WhatsApp usam <input> na busca; as antigas, um contenteditable
+  if (box instanceof HTMLInputElement) {
+    setInputValue(box, text);
+    return true;
+  }
   placeCaretAtEnd(box);
   document.execCommand('selectAll');
   document.execCommand('delete');
   pasteText(box, text);
   return true;
+}
+
+/** Esvazia a busca da lista de conversas (depois de abrir um contato por ela). */
+export async function clearSearch(): Promise<void> {
+  const box = queryFirst('searchBox');
+  if (!box) return;
+  if (box instanceof HTMLInputElement) return setInputValue(box, '');
+  placeCaretAtEnd(box);
+  document.execCommand('selectAll');
+  document.execCommand('delete');
 }

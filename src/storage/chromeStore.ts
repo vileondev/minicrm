@@ -1,11 +1,11 @@
-import type { AiSettings, Automation, QuickReply, Rule, Stage } from '../types';
+import type { AiSettings, Automation, QuickReply, Rule, Stage, ViewPrefs } from '../types';
 import { emitDataChange } from './bus';
-import { AI_SETTINGS_KEY, AUTOMATIONS_KEY, AUTOMATION_LOG_KEY, CRM_STAGES_KEY, QUICK_REPLIES_KEY, RULES_KEY } from './keys';
+import { AI_SETTINGS_KEY, AUTOMATIONS_KEY, AUTOMATION_LOG_KEY, CRM_STAGES_KEY, QUICK_REPLIES_KEY, RULES_KEY, VIEW_PREFS_KEY } from './keys';
 
 export const DEFAULT_STAGES: Stage[] = [
-  { id: 'lead', name: 'Lead', color: '#3b82f6', order: 0 },
-  { id: 'negotiation', name: 'Em negociação', color: '#f59e0b', order: 1 },
-  { id: 'closed', name: 'Fechado', color: '#10b981', order: 2 },
+  { id: 'lead', name: 'Lead', color: '#3b82f6', order: 0, probability: 10 },
+  { id: 'negotiation', name: 'Em negociação', color: '#f59e0b', order: 1, probability: 50 },
+  { id: 'closed', name: 'Fechado', color: '#10b981', order: 2, probability: 100 },
 ];
 
 const DEFAULT_REPLIES: QuickReply[] = [
@@ -46,3 +46,6 @@ export const getAutomationLog = () => get<Record<string, number>>(AUTOMATION_LOG
 export const saveAutomationLog = (v: Record<string, number>) => set(AUTOMATION_LOG_KEY, v, false);
 export const getAiSettings = async (): Promise<AiSettings> => ({ ...DEFAULT_AI, ...(await get<Partial<AiSettings>>(AI_SETTINGS_KEY, {})) });
 export const saveAiSettings = (v: AiSettings) => set(AI_SETTINGS_KEY, v);
+export const DEFAULT_VIEW: ViewPrefs = { hideGroups: true, showInternal: false };
+export const getViewPrefs = async (): Promise<ViewPrefs> => ({ ...DEFAULT_VIEW, ...(await get<Partial<ViewPrefs>>(VIEW_PREFS_KEY, {})) });
+export const saveViewPrefs = (v: ViewPrefs) => set(VIEW_PREFS_KEY, v);

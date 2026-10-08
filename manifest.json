@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "description": "CRM local, Kanban, fluxos de automação e assistente de IA opcional dentro do WhatsApp Web. Os dados ficam no seu navegador.",
   "permissions": ["storage"],
-  "host_permissions": ["https://api.anthropic.com/*", "https://api.openai.com/*"],
+  "host_permissions": ["https://api.anthropic.com/*", "https://api.openai.com/*", "https://generativelanguage.googleapis.com/*"],
   "background": {
     "service_worker": "background.js"
   },

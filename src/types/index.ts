@@ -3,6 +3,7 @@ export interface Stage {
   name: string;
   color: string;
   order: number;
+  probability?: number; // 0-100: chance de fechar a partir desta etapa (valor ponderado)
 }
 
 export interface QuickReply {
@@ -48,8 +49,23 @@ export interface Contact {
   heat?: Heat; // temperatura do lead (IA)
   score?: number; // 0-100 (IA)
   aiAt?: number; // última análise de IA
+  number?: string; // telefone vinculado (o WhatsApp não mostra mais o número nas mensagens)
+  isGroup?: boolean;
+  internal?: boolean; // grupo/contato interno: fora do funil, das métricas e dos fluxos
+  stageHistory?: StageEvent[]; // a última entrada é a etapa atual
   createdAt: number;
   updatedAt: number;
+}
+
+export interface StageEvent {
+  stageId: string | null;
+  at: number;
+}
+
+/** Preferências de visualização do Kanban (chrome.storage, fora do backup). */
+export interface ViewPrefs {
+  hideGroups: boolean;
+  showInternal: boolean;
 }
 
 export interface ChatContext {
@@ -89,7 +105,7 @@ export interface Automation {
 
 export interface AiSettings {
   enabled: boolean;
-  provider: 'anthropic' | 'openai';
+  provider: 'anthropic' | 'openai' | 'gemini';
   apiKey: string;
   model: string;
   context: string; // sobre o negócio, tom de voz, regras de preço

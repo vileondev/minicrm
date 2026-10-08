@@ -1,10 +1,11 @@
 import type { Contact } from '../types';
 import { getQuickReplies, saveQuickReplies } from '../storage/chromeStore';
-import { blankContact, deleteContact, putContact } from '../storage/db';
+import { blankContact, deleteContact, putContact, rekeyContact } from '../storage/db';
+import { readNumberFromProfile } from '../content/profile';
 import { exportBackup, importBackup } from '../storage/backup';
 import { collectDiagnostics } from '../content/diagnostics';
 import { state } from '../content/state';
-import { replaceTokenWithText } from '../utils/domHelpers';
+import { replaceTokenWithText, sanitizePhone } from '../utils/domHelpers';
 import { applyVars, avatarColor, initials, tagHue, todayStr } from '../utils/format';
 import { aiView } from './AiPanel';
 import { flowsView } from './Flows';
@@ -90,11 +91,43 @@ export function mountPanel(root: ShadowRoot): Panel {
 
     const noteIn = h('textarea', { placeholder: 'Nova nota…' });
 
+    /* número: o WhatsApp não mostra mais nas mensagens; vincular deixa o lead estável e permite abrir a conversa pelo número */
+    const link = async (raw: string) => {
+      const digits = sanitizePhone(raw);
+      if (!/^\d{8,15}$/.test(digits)) return toast(root, 'Número inválido. Use DDI + DDD + número, ex.: 5587999999999.');
+      if (!existing) await putContact(contact, true);
+      else if (legacy) await save();
+      await rekeyContact(contact.phone, digits, digits);
+      toast(root, `Número +${digits} vinculado a ${contact.name}.`);
+    };
+    const numIn = h('input', { type: 'tel', placeholder: '5587999999999', 'aria-label': 'Telefone com DDI e DDD', value: contact.number ?? '' });
+    numIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') void link(numIn.value); });
+    const readBtn = h('button', { class: 'btn ghost', title: 'Abre os dados do contato no WhatsApp, lê o número e fecha', on: { click: async () => {
+      readBtn.setAttribute('disabled', '');
+      const n = await readNumberFromProfile();
+      readBtn.removeAttribute('disabled');
+      if (n) await link(n);
+      else toast(root, 'Não achei o número nos dados do contato. Digite manualmente.');
+    } } }, icon('phone', 14), 'Ler do perfil');
+    const known = contact.number ?? (/^\d{8,}$/.test(contact.phone) ? contact.phone : null);
+    const numberSec = chat.isGroup ? null : h('div', { class: 'sec' }, h('h4', {}, 'Telefone'),
+      known
+        ? h('p', { class: 'muted' }, '+' + known)
+        : h('p', { class: 'muted' }, 'Sem número vinculado. Leads identificados só pelo nome se perdem quando o nome muda e são mais difíceis de abrir pelo Kanban.'),
+      known ? null : h('div', { class: 'inline' }, numIn, h('button', { class: 'btn', on: { click: () => void link(numIn.value) } }, 'Vincular')),
+      known ? null : readBtn);
+
+    const internalSec = h('div', { class: 'sec' },
+      h('label', { class: 'check', for: 'ct-internal' },
+        h('input', { id: 'ct-internal', type: 'checkbox', checked: !!contact.internal, on: { change: (e) => { contact.internal = (e.target as HTMLInputElement).checked || undefined; void save(); } } }),
+        chat.isGroup ? 'Grupo interno (fora do funil, das métricas e dos fluxos)' : 'Contato interno (fora do funil, das métricas e dos fluxos)'));
+
     const removeBtn = existing
       ? h('button', { class: 'btn ghost', on: { click: () => { if (confirm('Remover este lead do CRM?')) void deleteContact(existing.phone); } } }, 'Remover do CRM')
       : h('span');
 
     return [
+      numberSec,
       h('div', { class: 'sec' }, h('h4', {}, 'Etapa do funil'), stageBtns),
       h('div', { class: 'sec' }, h('h4', {}, 'Valor do negócio (R$)'), value),
       h('div', { class: 'sec' }, h('h4', {}, 'Tags'),
@@ -110,8 +143,9 @@ export function mountPanel(root: ShadowRoot): Panel {
         h('button', { class: 'btn', on: { click: () => { const v = noteIn.value.trim(); if (v) { contact.notes = [{ id: uid(), text: v, createdAt: Date.now() }, ...contact.notes]; void save(); } } } }, 'Adicionar nota'),
         h('div', { style: 'margin-top:8px' }, ...contact.notes.map((n) => h('div', { class: 'note' }, n.text,
           h('div', { class: 'muted' }, new Date(n.createdAt).toLocaleString('pt-BR'), ' ', h('button', { class: 'x', on: { click: () => { contact.notes = contact.notes.filter((x) => x.id !== n.id); void save(); } } }, 'remover')))))),
+      internalSec,
       removeBtn,
-    ];
+    ].filter((n): n is HTMLElement => !!n);
   }
 
   async function repliesView(): Promise<Node[]> {

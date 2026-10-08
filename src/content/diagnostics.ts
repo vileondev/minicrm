@@ -1,5 +1,6 @@
 import { conversationRoot } from './observer';
-import { MESSAGE_ID_PATTERN, queryAll } from '../utils/domSelectors';
+import { MESSAGE_ID_PATTERN, OUTGOING_MARKERS, queryAll, queryFirst } from '../utils/domSelectors';
+import { readMessages } from './messages';
 import { getComposer } from '../utils/domHelpers';
 import { state } from './state';
 
@@ -25,6 +26,15 @@ export function collectDiagnostics(): string {
     messageIdsFound: ids.length,
     messageIdSamples: ids.slice(0, 3).map((i) => mask(i).slice(0, 40)),
     chatContext: state.chat ? { ...state.chat, key: mask(state.chat.key), number: state.chat.number ? mask(state.chat.number) : null } : null,
+    // sinais usados para saber quem enviou cada mensagem (ver isOutgoing em messages.ts)
+    direction: {
+      textBubbles: root?.querySelectorAll('[data-pre-plain-text]').length ?? 0,
+      messageInClass: root?.querySelectorAll('[class*="message-in"]').length ?? 0,
+      messageOutClass: root?.querySelectorAll('[class*="message-out"]').length ?? 0,
+      deliveryIcons: root?.querySelectorAll(OUTGOING_MARKERS).length ?? 0,
+      readAsMine: state.chat ? readMessages(state.chat.name).filter((m) => m.out).length : 0,
+    },
+    searchBoxTag: queryFirst('searchBox')?.tagName ?? null,
     chatListRows: rows.length,
     contacts: state.contacts.length,
   }, null, 2);

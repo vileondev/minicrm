@@ -5,14 +5,19 @@ import calendarBlank from '@phosphor-icons/core/assets/regular/calendar-blank.sv
 import caretLeft from '@phosphor-icons/core/assets/regular/caret-left.svg';
 import caretRight from '@phosphor-icons/core/assets/regular/caret-right.svg';
 import chatCircleText from '@phosphor-icons/core/assets/regular/chat-circle-text.svg';
+import chartBar from '@phosphor-icons/core/assets/regular/chart-bar.svg';
 import checkCircle from '@phosphor-icons/core/assets/regular/check-circle.svg';
 import coins from '@phosphor-icons/core/assets/regular/coins.svg';
 import cornersOut from '@phosphor-icons/core/assets/regular/corners-out.svg';
 import downloadSimple from '@phosphor-icons/core/assets/regular/download-simple.svg';
+import eye from '@phosphor-icons/core/assets/regular/eye.svg';
+import eyeSlash from '@phosphor-icons/core/assets/regular/eye-slash.svg';
 import gearSix from '@phosphor-icons/core/assets/regular/gear-six.svg';
 import kanban from '@phosphor-icons/core/assets/regular/kanban.svg';
+import listChecks from '@phosphor-icons/core/assets/regular/list-checks.svg';
 import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glass.svg';
 import paperPlaneTilt from '@phosphor-icons/core/assets/regular/paper-plane-tilt.svg';
+import phone from '@phosphor-icons/core/assets/regular/phone.svg';
 import plus from '@phosphor-icons/core/assets/regular/plus.svg';
 import sidebarSimple from '@phosphor-icons/core/assets/regular/sidebar-simple.svg';
 import sparkle from '@phosphor-icons/core/assets/regular/sparkle.svg';
@@ -29,15 +34,20 @@ const ICONS = {
   calendar: calendarBlank,
   'caret-left': caretLeft,
   'caret-right': caretRight,
+  chart: chartBar,
   chat: chatCircleText,
   check: checkCircle,
   coins,
   fullscreen: cornersOut,
   download: downloadSimple,
+  eye,
+  'eye-off': eyeSlash,
   gear: gearSix,
   kanban,
+  tasks: listChecks,
   search: magnifyingGlass,
   send: paperPlaneTilt,
+  phone,
   plus,
   panel: sidebarSimple,
   sparkle,

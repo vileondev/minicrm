@@ -1,7 +1,8 @@
 import type { ChatContext } from '../types';
-import { HEADER_STATUS_PATTERN, MESSAGE_ID_PATTERN, PHONE_TEXT_PATTERN, queryFirst } from '../utils/domSelectors';
+import { GROUP_SUBTITLE_PATTERN, HEADER_STATUS_PATTERN, MESSAGE_ID_PATTERN, PHONE_TEXT_PATTERN, queryFirst } from '../utils/domSelectors';
 import { sanitizePhone } from '../utils/domHelpers';
 import { normalizeName } from '../utils/format';
+import { isOutgoing, splitReply } from './messages';
 
 /** Painel da conversa aberta: ancestral do composer que também contém um <header>. Não depende de #main. */
 export function conversationRoot(): HTMLElement | null {
@@ -20,6 +21,14 @@ function readTitle(root: HTMLElement): string {
   if (line) return line;
   const auto = Array.from(header.querySelectorAll<HTMLElement>('span[dir="auto"]')).find((e) => e.textContent?.trim());
   return auto?.textContent?.trim() ?? '';
+}
+
+function isGroupHeader(root: HTMLElement): boolean {
+  const header = root.querySelector('header');
+  if (!header) return false;
+  const lines = header.innerText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const attrs = Array.from(header.querySelectorAll('[title]')).map((e) => e.getAttribute('title') ?? '');
+  return [...lines, ...attrs].some((l) => GROUP_SUBTITLE_PATTERN.test(l));
 }
 
 interface Idf { id: string; digits: string; kind: string }
@@ -47,6 +56,8 @@ export function readChatContext(): ChatContext | null {
   const lid = pick('lid');
   if (lid) return { key: 'lid' + lid.digits, number: PHONE_TEXT_PATTERN.test(name) ? sanitizePhone(name) : null, name, isGroup: false, byName: false };
   if (!name) return null;
+  // data-id sem telefone (formato atual do WhatsApp): grupo é reconhecido pela linha de participantes "…, Você"
+  if (isGroupHeader(root)) return { key: 'name_' + normalizeName(name), number: null, name, isGroup: true, byName: true };
   if (PHONE_TEXT_PATTERN.test(name)) {
     const n = sanitizePhone(name);
     return { key: n, number: n, name, isGroup: false, byName: false };
@@ -79,16 +90,20 @@ export function startObserver(h: ObserverHandlers): () => void {
     h.onTick();
     if (!ctx) return;
 
+    // cada balão de texto tem data-pre-plain-text; o id vem do data-id do balão (hoje só um hash, sem "false_/true_")
     const root = conversationRoot();
-    const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('[data-id]')).filter((n) => MESSAGE_ID_PATTERN.test(n.getAttribute('data-id') ?? '')) : [];
+    const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('[data-pre-plain-text]')) : [];
+    const idOf = (n: HTMLElement) => n.closest('[data-id]')?.getAttribute('data-id') ?? (n.getAttribute('data-pre-plain-text') ?? '') + n.textContent;
     const last = nodes[nodes.length - 1];
-    const lastId = last?.getAttribute('data-id') ?? '';
-    const fresh = last && !seen.has(lastId) && lastId.startsWith('false_'); // só a mensagem mais recente, e só se for recebida
-    nodes.forEach((n) => seen.add(n.getAttribute('data-id')!));
-    if (primed && fresh && last) {
-      const text = queryFirst('messageText', last)?.textContent ?? '';
-      if (text) h.onIncoming(text, ctx);
+    if (root && last && primed && !seen.has(idOf(last))) {
+      const author = last.getAttribute('data-pre-plain-text')?.match(/\]\s*(.*?):\s*$/)?.[1] ?? '';
+      // só a mensagem mais recente, e só se for recebida
+      if (!isOutgoing(last, root, author, ctx.name, ctx.isGroup)) {
+        const { text } = splitReply(last);
+        if (text) h.onIncoming(text, ctx);
+      }
     }
+    nodes.forEach((n) => seen.add(idOf(n)));
     if (nodes.length) primed = true;
   };
 
